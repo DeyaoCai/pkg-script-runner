@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glass Lab</title>
+    <link rel="stylesheet" href="./fonts/jetbrains-mono.css" />
+    <link rel="stylesheet" href="./glass-lab.css" />
+  </head>
+  <body>
+    <div class="shell" id="shell">
+      <header class="bar">
+        <div class="bar-drag">
+          <strong id="title">Glass Lab</strong>
+          <span class="tag" id="tag">—</span>
+        </div>
+        <button type="button" class="x" id="closeBtn" title="关闭" aria-label="关闭">×</button>
+      </header>
+      <main class="body">
+        <p class="desc" id="desc"></p>
+        <div class="sliders" id="sliders"></div>
+        <div class="cards">
+          <div class="card" id="cardA">面板</div>
+          <div class="card strong" id="cardB">面板加强</div>
+          <div class="card" id="cardC">对照</div>
+        </div>
+        <ul class="notes" id="notes"></ul>
+      </main>
+    </div>
+    <script src="./glass-lab.js"></script>
+  </body>
+</html>
