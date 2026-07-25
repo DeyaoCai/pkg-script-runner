@@ -55,6 +55,9 @@ class Win32Window {
   // Return a RECT representing the bounds of the current client area.
   RECT GetClientArea();
 
+  // Drop the native caption bar without window_manager (keeps Accent glass).
+  void HideTitleBar();
+
  protected:
   // Processes and route salient window messages for mouse handling,
   // size change and DPI. Delegates handling of these to member overloads that
@@ -89,6 +92,16 @@ class Win32Window {
 
   // Update the window frame's theme to match the system theme.
   static void UpdateTheme(HWND const window);
+
+  // Accent blur-behind (same path as flutter_acrylic aero).
+  static void ApplyBlurBehind(HWND const window);
+
+  // Solid tint while moving/resizing - skips live blur recompose lag.
+  static void ApplyDragFill(HWND const window);
+
+  static void SetAccentPolicy(HWND const window,
+                              int accent_state,
+                              unsigned int gradient_color);
 
   bool quit_on_close_ = false;
 

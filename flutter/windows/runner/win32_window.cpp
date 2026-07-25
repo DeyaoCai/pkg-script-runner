@@ -2,7 +2,9 @@
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <windowsx.h>
 
+#include "color_tokens.h"
 #include "resource.h"
 
 namespace {
@@ -123,6 +125,7 @@ bool Win32Window::Create(const std::wstring& title,
   }
 
   UpdateTheme(window);
+  HideTitleBar();
   return OnCreate();
 }
 
@@ -183,11 +186,54 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
     }
 
+    case WM_NCCALCSIZE:
+      // Make the whole window client area. Leaving a native caption/NC strip
+      // after clearing WS_CAPTION is what paints the white band at the top.
+      if (wparam) {
+        return 0;
+      }
+      return 0;
+
+    case WM_NCHITTEST: {
+      // With no NC frame, map edges to resize / caption so drag+resize still work.
+      LRESULT hit = DefWindowProc(hwnd, message, wparam, lparam);
+      if (hit != HTCLIENT) {
+        return hit;
+      }
+      POINT cursor{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      RECT window_rect{};
+      ::GetWindowRect(hwnd, &window_rect);
+      const int border = ::GetSystemMetrics(SM_CXFRAME) +
+                         ::GetSystemMetrics(SM_CXPADDEDBORDER);
+      const bool left = cursor.x < window_rect.left + border;
+      const bool right = cursor.x >= window_rect.right - border;
+      const bool top = cursor.y < window_rect.top + border;
+      const bool bottom = cursor.y >= window_rect.bottom - border;
+      if (top && left) return HTTOPLEFT;
+      if (top && right) return HTTOPRIGHT;
+      if (bottom && left) return HTBOTTOMLEFT;
+      if (bottom && right) return HTBOTTOMRIGHT;
+      if (left) return HTLEFT;
+      if (right) return HTRIGHT;
+      if (top) return HTTOP;
+      if (bottom) return HTBOTTOM;
+      return HTCLIENT;
+    }
+
     case WM_ACTIVATE:
       if (child_content_ != nullptr) {
         SetFocus(child_content_);
       }
       return 0;
+
+    case WM_ENTERSIZEMOVE:
+      // Live blur-behind recomposites every move frame -> lag. Solid fill instead.
+      ApplyDragFill(hwnd);
+      break;
+
+    case WM_EXITSIZEMOVE:
+      ApplyBlurBehind(hwnd);
+      break;
 
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
@@ -254,5 +300,75 @@ void Win32Window::UpdateTheme(HWND const window) {
     DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
                           &enable_dark_mode, sizeof(enable_dark_mode));
   }
+}
+
+void Win32Window::SetAccentPolicy(HWND const window,
+                                  int accent_state,
+                                  unsigned int gradient_color) {
+  if (!window) {
+    return;
+  }
+
+  using SetWindowCompositionAttribute = BOOL(WINAPI*)(HWND, void*);
+  HMODULE user32 = LoadLibraryA("user32.dll");
+  if (!user32) {
+    return;
+  }
+  auto set_composition = reinterpret_cast<SetWindowCompositionAttribute>(
+      GetProcAddress(user32, "SetWindowCompositionAttribute"));
+  if (set_composition) {
+    struct AccentPolicy {
+      int accent_state;
+      int accent_flags;
+      unsigned int gradient_color;
+      int animation_id;
+    };
+    struct CompositionData {
+      int attribute;
+      void* data;
+      unsigned long data_size;
+    };
+    AccentPolicy policy = {accent_state, 2, gradient_color, 0};
+    CompositionData data = {19, &policy, sizeof(policy)};
+    set_composition(window, &data);
+  }
+  FreeLibrary(user32);
+}
+
+void Win32Window::ApplyBlurBehind(HWND const window) {
+  // ACCENT_ENABLE_BLURBEHIND = 3. See color_tokens.h / ColorTokens.glassTint.
+  // Do not call DwmExtendFrameIntoClientArea(-1) here - whites out Flutter + Accent.
+  SetAccentPolicy(window, 3, kGlassTintAccent);
+}
+
+void Win32Window::ApplyDragFill(HWND const window) {
+  // ACCENT_ENABLE_GRADIENT = 1. See ColorTokens.glassDragFill.
+  SetAccentPolicy(window, 1, kGlassDragFillAccent);
+}
+
+void Win32Window::HideTitleBar() {
+  HWND window = window_handle_;
+  if (!window) {
+    return;
+  }
+
+  // Strip caption only. Keep thick-frame resize. Avoid DwmExtendFrame margins={0}
+  // (that is what window_manager TitleBarStyle.hidden does and it kills glass).
+  LONG_PTR style = ::GetWindowLongPtr(window, GWL_STYLE);
+  style &= ~(WS_CAPTION | WS_SYSMENU);
+  style |= WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+  ::SetWindowLongPtr(window, GWL_STYLE, style);
+  ::SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                     SWP_NOOWNERZORDER);
+
+  // Stretch Flutter view into the former caption strip.
+  RECT rect = GetClientArea();
+  if (child_content_ != nullptr) {
+    ::MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,
+                 rect.bottom - rect.top, TRUE);
+  }
+
+  ApplyBlurBehind(window);
 }
 

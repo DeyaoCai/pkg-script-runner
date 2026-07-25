@@ -2,6 +2,8 @@
 
 #include <optional>
 
+#include <flutter/standard_method_codec.h>
+
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -24,13 +26,37 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() { this->Show(); });
+  // Drag without a caption: Flutter calls startDrag -> SC_MOVE.
+  chrome_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "pkg.chrome",
+          &flutter::StandardMethodCodec::GetInstance());
+  HWND hwnd = GetHandle();
+  chrome_channel_->SetMethodCallHandler(
+      [hwnd](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() == "startDrag") {
+          ::ReleaseCapture();
+          ::SendMessage(hwnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, 0);
+          result->Success();
+          return;
+        }
+        result->NotImplemented();
+      });
+
+  // Style changes can race plugin init - pin chrome/glass again before show.
+  flutter_controller_->engine()->SetNextFrameCallback([this]() {
+    HideTitleBar();
+    this->Show();
+  });
   flutter_controller_->ForceRedraw();
 
   return true;
 }
 
 void FlutterWindow::OnDestroy() {
+  chrome_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

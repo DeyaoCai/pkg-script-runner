@@ -1,5 +1,5 @@
 name: pkg_script_runner
-description: Hello World
+description: Pkg Script Runner (Flutter) — frosted glass Hello World
 publish_to: "none"
 version: 0.1.0+1
 
@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_acrylic: ^1.1.4
 
 dev_dependencies:
   flutter_test:
