@@ -6,8 +6,16 @@
 
 ```bash
 pnpm install
-pnpm rebuild:native
+pnpm rebuild:native   # 可选：无 VS Build Tools 时可跳过，预编译 node-pty 一般够用
 pnpm dev
+```
+
+若 `electron` 下载失败（网络），可设置镜像后重装，或从已有环境拷贝 `node_modules/electron/dist`：
+
+```bash
+# 可选镜像（按你的网络选用）
+# set ELECTRON_MIRROR=https://cdn.npmmirror.com/binaries/electron/
+pnpm install
 ```
 
 ## 打包（Windows portable）
