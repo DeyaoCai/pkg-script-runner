@@ -1,0 +1,75 @@
+/**
+ * App layout + editor aliases on top of shared runner/ui/tokens.css.
+ * Prefer semantic --color-* / compat aliases; keep layout vars local.
+ */
+:root {
+  --side: var(--color-bg-raised);
+  --line: var(--color-border);
+  --cyan: var(--color-accent);
+  --ok: var(--color-success);
+  --bad: var(--color-danger);
+  --warn: var(--color-warning);
+  --diff-add: color-mix(in srgb, var(--color-success) 32%, var(--transparent));
+  --diff-del: color-mix(in srgb, var(--color-danger) 32%, var(--transparent));
+  --diff-hunk: var(--color-accent-soft-strong);
+  --scroll-size: 8px;
+  --toolbar-h: 40px;
+  --zone-rail-h: 40px;
+  --tab-h: 32px;
+  --vcs-h: 220px;
+  --term-h: 220px;
+  --tree-w: 260px;
+  --git-tool-w: 420px;
+  --activity-w: 48px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+}
+
+*::-webkit-scrollbar {
+  width: var(--scroll-size);
+  height: var(--scroll-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 1px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}

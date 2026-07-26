@@ -1,0 +1,34 @@
+appId: local.pkg-runner.code-editor
+productName: Code Editor
+copyright: Copyright © DS Agent
+artifactName: CodeEditor-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: assets
+files:
+  - dist/**/*
+  - assets/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/node_modules/node-pty/prebuilds/darwin-*/**'
+  - '!**/node_modules/node-pty/prebuilds/win32-arm64/**'
+  - '!**/node_modules/node-pty/deps/**'
+  - '!**/node_modules/node-pty/src/**'
+asar: true
+asarUnpack:
+  - '**/*.node'
+  - '**/node-pty/prebuilds/**'
+electronLanguages:
+  - en-US
+  - zh-CN
+compression: maximum
+npmRebuild: false
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: assets/icon.png
+  executableName: CodeEditor
+portable:
+  artifactName: CodeEditor-${version}-portable.exe
