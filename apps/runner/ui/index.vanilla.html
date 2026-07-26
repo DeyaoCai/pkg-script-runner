@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pkg Runner</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('pkg-runner-theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+          var a = Number(localStorage.getItem('pkg-runner:glass-alpha'));
+          if (isFinite(a)) {
+            document.documentElement.style.setProperty(
+              '--glass-alpha',
+              String(Math.min(100, Math.max(10, Math.round(a))) / 100),
+            );
+          }
+          var b = Number(localStorage.getItem('pkg-runner:glass-blur'));
+          if (isFinite(b)) {
+            document.documentElement.style.setProperty(
+              '--glass-blur',
+              Math.min(40, Math.max(0, Math.round(b))) + 'px',
+            );
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="./fonts/jetbrains-mono.css" />
+    <link rel="stylesheet" href="./vendor/xterm.css" />
+    <link rel="stylesheet" href="./tokens.css" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="appShell">
+    <div class="app-atmosphere" aria-hidden="true"></div>
+    <header class="titlebar" aria-label="窗口标题栏">
+      <div class="titlebar-brand titlebar-drag">
+        <span class="mark">PR</span>
+        <div class="brand-text">
+          <strong>Pkg Runner</strong>
+          <span class="sub">scripts · tray</span>
+        </div>
+      </div>
+      <div class="titlebar-mid titlebar-drag">
+        <div class="meta" id="meta">选择含 package.json 的项目目录</div>
+      </div>
+      <div class="titlebar-actions">
+        <button
+          type="button"
+          id="themeBtn"
+          class="btn titlebar-tool theme-toggle"
+          title="主题设置"
+          aria-expanded="false"
+          aria-controls="themePanel"
+          aria-haspopup="dialog"
+        >
+          主题
+        </button>
+        <button
+          type="button"
+          id="ssHistoryBtn"
+          class="btn titlebar-tool"
+          title="截屏历史"
+        >
+          截屏
+        </button>
+        <button
+          type="button"
+          id="settingsBtn"
+          class="btn titlebar-tool"
+          title="设置：字体 · 热键 · Shell"
+        >
+          设置
+        </button>
+        <button type="button" class="win-btn" id="minBtn" title="最小化" aria-label="最小化">
+          <span class="ico ico-min"></span>
+        </button>
+        <button type="button" class="win-btn" id="maxBtn" title="最大化" aria-label="最大化">
+          <span class="ico ico-max" id="maxIcon"></span>
+        </button>
+        <button type="button" class="win-btn close" id="closeBtn" title="关闭到托盘" aria-label="关闭">
+          <span class="ico ico-close"></span>
+        </button>
+      </div>
+    </header>
+
+    <div class="body-pad" id="bodyPad">
+      <aside class="projects-panel glass-surface" id="projectsPanel">
+        <div class="scripts-head">
+          <span>项目</span>
+          <div class="scripts-head-actions">
+            <input
+              id="projectSearchInput"
+              type="search"
+              spellcheck="false"
+              placeholder="模糊搜索…"
+              title="按名称或路径模糊筛选项目"
+            />
+            <button type="button" id="addProjectBtn" class="btn primary" title="添加项目目录">
+              添加
+            </button>
+          </div>
+        </div>
+        <div id="projectList" class="project-list"></div>
+        <div class="project-add-path">
+          <input
+            id="pathInput"
+            type="text"
+            spellcheck="false"
+            placeholder="粘贴路径后回车添加"
+          />
+        </div>
+      </aside>
+
+      <div
+        class="split-resizer"
+        id="projectsResizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整项目栏宽度"
+        title="拖动调整宽度 · 双击还原"
+      ></div>
+
+      <main class="main-split" id="mainSplit">
+        <section class="scripts-panel glass-surface" id="scriptsPanel">
+          <div class="scripts-head">
+            <span id="scriptsLabel">可执行</span>
+            <div class="scripts-head-actions">
+              <input
+                id="searchInput"
+                type="search"
+                spellcheck="false"
+                placeholder="模糊搜索…"
+                title="按脚本名或命令模糊筛选"
+              />
+            </div>
+          </div>
+          <div id="scripts" class="scripts"></div>
+        </section>
+
+        <div
+          class="split-resizer"
+          id="scriptsResizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整脚本栏宽度"
+          title="拖动调整宽度 · 双击还原"
+        ></div>
+
+        <section class="log-panel glass-surface" id="logPanel">
+          <div class="scripts-head" id="logPanelHead">
+            <span id="logPanelLabel">输出</span>
+            <div class="scripts-head-actions">
+              <button
+                type="button"
+                id="persistLogBtn"
+                class="btn toggle-btn"
+                title="日志落盘：满 64KB 写入；单文件约 1MB 拆分（文件名精确到毫秒）；默认关"
+              >
+                落盘
+              </button>
+              <button type="button" id="openLogsDirBtn" class="btn" title="打开落盘日志目录">
+                目录
+              </button>
+              <button
+                type="button"
+                id="clearDiskLogsBtn"
+                class="btn"
+                title="清除已落盘的日志文件"
+              >
+                清记录
+              </button>
+              <button type="button" id="clearLogBtn" class="btn" title="清空当前输出框">
+                清空
+              </button>
+            </div>
+          </div>
+          <div class="log-tabs-wrap">
+            <button type="button" class="list-nav-btn" id="logTabsPrevBtn" title="上一个输出" aria-label="上一个输出">
+              ‹
+            </button>
+            <div id="logTabs" class="log-tabs" role="tablist"></div>
+            <button type="button" class="list-nav-btn" id="logTabsNextBtn" title="下一个输出" aria-label="下一个输出">
+              ›
+            </button>
+            <button
+              type="button"
+              class="log-tab-add"
+              id="shellAddBtn"
+              title="新建交互终端（当前项目目录）"
+              aria-label="新建 Shell"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              class="log-tab-layout"
+              id="shellLayoutBtn"
+              data-layout="grid"
+              title="当前：网格 · 点击改为单个"
+              aria-label="切换 Shell 网格/单个"
+            >
+              网格
+            </button>
+          </div>
+          <div id="logViews" class="log-views"></div>
+          <div id="shellBar" class="shell-bar" hidden>
+            <span class="shell-cwd" id="shellCwd" title=""></span>
+            <span class="shell-prompt" aria-hidden="true">›</span>
+            <input
+              id="shellInput"
+              class="shell-input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="输入命令，Enter 执行"
+            />
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="scriptPopover" class="script-popover" hidden>
+      <div class="script-popover-name" id="scriptPopoverName"></div>
+      <pre class="script-popover-cmd" id="scriptPopoverCmd"></pre>
+      <div class="script-popover-hint" id="scriptPopoverHint">双击运行</div>
+    </div>
+
+    <div
+      id="themePanel"
+      class="theme-panel"
+      role="dialog"
+      aria-labelledby="themePanelTitle"
+      hidden
+    >
+      <div class="theme-panel-head">
+        <strong id="themePanelTitle">主题设置</strong>
+        <button type="button" class="theme-panel-close" id="themePanelCloseBtn" title="关闭" aria-label="关闭">
+          ×
+        </button>
+      </div>
+      <div class="theme-panel-body">
+        <div class="font-field">
+          <span>外观</span>
+          <div class="theme-seg" role="group" aria-label="外观">
+            <button type="button" class="theme-seg-btn is-active" data-theme-choice="dark" id="themeChoiceDark">
+              暗色
+            </button>
+            <button type="button" class="theme-seg-btn" data-theme-choice="light" id="themeChoiceLight">
+              浅色
+            </button>
+          </div>
+        </div>
+        <div class="font-field glass-field">
+          <span>面板透明度 <em id="glassAlphaLabel">55%</em></span>
+          <input
+            id="glassAlphaRange"
+            class="glass-range"
+            type="range"
+            min="10"
+            max="100"
+            step="1"
+            value="55"
+            title="应用内面板叠色不透明度（越低霜化越明显）"
+          />
+        </div>
+        <div class="font-field glass-field">
+          <span>模糊强度 <em id="glassBlurLabel">22px</em></span>
+          <input
+            id="glassBlurRange"
+            class="glass-range"
+            type="range"
+            min="0"
+            max="40"
+            step="1"
+            value="22"
+            title="backdrop-filter 模糊半径"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div id="confirmModal" class="modal" hidden>
+      <div class="modal-backdrop" data-confirm-cancel></div>
+      <div
+        class="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirmTitle"
+        aria-describedby="confirmMessage"
+      >
+        <div class="modal-title" id="confirmTitle">确认</div>
+        <div class="modal-message" id="confirmMessage"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="confirmCancelBtn">取消</button>
+          <button type="button" class="btn danger solid" id="confirmOkBtn">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsModal" class="modal" hidden>
+      <div class="modal-backdrop" data-settings-close></div>
+      <div
+        class="modal-card settings-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settingsTitle"
+      >
+        <div class="modal-title" id="settingsTitle">设置</div>
+        <div class="settings-body">
+          <div class="font-field">
+            <span>字体</span>
+            <div class="font-picker" id="fontPicker">
+              <button
+                type="button"
+                class="font-picker-btn"
+                id="fontPickerBtn"
+                title="界面与内容共用"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+              >
+                <span class="font-picker-label" id="fontPickerLabel">JetBrains Mono</span>
+                <span class="font-picker-caret" aria-hidden="true">▾</span>
+              </button>
+            </div>
+          </div>
+          <div class="font-field glass-field">
+            <span>Shell 列数 <em id="shellColsLabel">2</em></span>
+            <input
+              id="shellColsRange"
+              class="glass-range"
+              type="range"
+              min="1"
+              max="4"
+              step="1"
+              value="2"
+              title="多 Shell 并排时的列数"
+            />
+            <p class="settings-hint">网格模式下的列数（1–4）</p>
+          </div>
+          <div class="font-field">
+            <span>Shell 布局</span>
+            <div class="shell-layout-row" role="group" aria-label="Shell 布局">
+              <button type="button" class="btn shell-layout-btn is-active" data-shell-layout="grid" id="shellLayoutGridBtn">
+                网格
+              </button>
+              <button type="button" class="btn shell-layout-btn" data-shell-layout="single" id="shellLayoutSingleBtn">
+                单个
+              </button>
+            </div>
+            <p class="settings-hint">网格：同时看多个 · 单个：只看当前 Shell Tab</p>
+          </div>
+          <label class="settings-check">
+            <input type="checkbox" id="alwaysOnTopCheck" />
+            <span>永久置顶</span>
+            <em>窗口始终浮在其它应用之上</em>
+          </label>
+          <div class="font-field">
+            <span>截屏热键</span>
+            <div class="hotkey-row">
+              <button
+                type="button"
+                class="hotkey-capture"
+                id="screenshotHotkeyBtn"
+                data-hotkey="screenshot"
+                title="点击后按下新的组合键；默认未设置"
+              >
+                未设置
+              </button>
+              <button type="button" class="btn" id="screenshotHotkeyClearBtn" title="清空热键">
+                清空
+              </button>
+            </div>
+            <p class="settings-hint" id="screenshotHotkeyHint">默认留空 · 托盘也可触发截屏</p>
+          </div>
+          <div class="font-field">
+            <span>显示/隐藏热键</span>
+            <div class="hotkey-row">
+              <button
+                type="button"
+                class="hotkey-capture"
+                id="activateHotkeyBtn"
+                data-hotkey="activate"
+                title="点击后按下新的组合键；默认未设置"
+              >
+                未设置
+              </button>
+              <button type="button" class="btn" id="activateHotkeyClearBtn" title="清空热键">
+                清空
+              </button>
+            </div>
+            <p class="settings-hint" id="activateHotkeyHint">默认留空 · 显示时关到托盘，隐藏时唤起</p>
+          </div>
+          <div class="font-field">
+            <span>截屏历史上限</span>
+            <input
+              id="ssHistoryLimitInput"
+              class="settings-number"
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+              value="10"
+              title="最多保留多少条截屏历史（1–100）"
+            />
+            <p class="settings-hint">默认 10 · 图文落盘，重启仍在；调低会立刻删掉超出的旧记录</p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn primary" id="settingsCloseBtn">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="ssHistoryModal" class="modal" hidden>
+      <div class="modal-backdrop" data-ss-history-close></div>
+      <div
+        class="modal-card ss-history-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ssHistoryTitle"
+      >
+        <div class="modal-title-row">
+          <div class="modal-title" id="ssHistoryTitle">截屏历史</div>
+          <div class="modal-title-actions">
+            <button type="button" class="btn" id="ssCaptureBtn" title="开始截屏">新截屏</button>
+            <button type="button" class="btn" id="ssHistoryDirBtn" title="打开截屏落盘目录">
+              目录
+            </button>
+            <button type="button" class="btn" id="ssHistoryClearBtn" title="清空全部">清空</button>
+          </div>
+        </div>
+        <div class="ss-history-toolbar">
+          <label class="ss-history-check-all">
+            <input type="checkbox" id="ssHistorySelectAll" />
+            <span>全选</span>
+          </label>
+          <div class="ss-history-export-group">
+            <button
+              type="button"
+              class="btn"
+              data-ss-export="md"
+              title="导出 Markdown（图片 base64 内嵌）"
+            >
+              MD
+            </button>
+            <button
+              type="button"
+              class="btn"
+              data-ss-export="html"
+              title="导出可交互 HTML（截图 base64 内嵌，文件会较大；处理结果 JSON 另存、仅勾选状态）"
+            >
+              HTML
+            </button>
+          </div>
+        </div>
+        <div id="ssHistoryList" class="ss-history-list"></div>
+        <p class="settings-hint" id="ssHistoryLimitHint">
+          勾选 → 导出 MD / HTML · 已落盘 · 最多 10 条
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn primary" id="ssHistoryCloseBtn">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    </div>
+
+    <div class="font-picker-menu" id="fontPickerMenu" role="listbox" hidden></div>
+
+    <script src="./fonts-catalog.js"></script>
+    <script src="./ansi.js"></script>
+    <script src="./vendor/xterm.js"></script>
+    <script src="./vendor/addon-fit.js"></script>
+    <script src="./tokens.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

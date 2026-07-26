@@ -1,0 +1,269 @@
+.main-split {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  --scripts-w: 176px;
+}
+
+.split-resizer {
+  flex: 0 0 5px;
+  width: 5px;
+  margin: 0 3px;
+  border-radius: 999px;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  align-self: stretch;
+  -webkit-app-region: no-drag;
+  touch-action: none;
+}
+
+.split-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 8px 1px;
+  border-radius: 999px;
+  background: var(--border);
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.split-resizer:hover::before,
+.split-resizer.is-dragging::before {
+  opacity: 1;
+  background: var(--accent);
+}
+
+body.is-resizing-scripts,
+body.is-resizing-projects {
+  cursor: col-resize;
+}
+
+body.is-resizing-scripts *,
+body.is-resizing-projects * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.titlebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  height: var(--titlebar-height);
+  flex-shrink: 0;
+  background: var(--titlebar);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.35);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.35);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--neutral-0) 7%, transparent);
+  user-select: none;
+  overflow: hidden;
+}
+
+.titlebar-drag {
+  /* Opaque frameless: native drag works again (no IPC setPosition lag). */
+  -webkit-app-region: drag;
+  app-region: drag;
+  cursor: default;
+}
+
+.titlebar-brand {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 0 14px;
+  border-right: 1px solid var(--border);
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-mark-fg);
+  border: 1px solid var(--color-mark-border);
+  background: var(--color-mark-bg);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.brand-text strong {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.brand-text .sub {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.titlebar-mid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  width: 100%;
+}
+
+.meta.error {
+  color: var(--color-fg-danger);
+}
+
+.titlebar-actions {
+  display: flex;
+  align-items: stretch;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.titlebar-tool {
+  align-self: center;
+  margin-right: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.btn.toggle-btn.active {
+  background: var(--active);
+  border-color: var(--color-border-strong);
+  color: var(--color-fg-on-accent);
+}
+
+
+.win-btn {
+  width: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.win-btn:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.win-btn.close:hover {
+  background: var(--color-danger-hover);
+  color: var(--color-fg-on-danger);
+}
+
+.ico {
+  display: block;
+  width: 10px;
+  height: 10px;
+  position: relative;
+}
+
+.ico-min {
+  border-bottom: 1px solid currentColor;
+  height: 0;
+  width: 10px;
+  margin-top: 5px;
+}
+
+.ico-max {
+  border: 1px solid currentColor;
+  box-sizing: border-box;
+}
+
+.ico-restore {
+  box-sizing: border-box;
+  border: 1px solid currentColor;
+  width: 8px;
+  height: 8px;
+  margin-top: 2px;
+  margin-left: -2px;
+  box-shadow: 2px -2px 0 -1px var(--color-resize-contrast), 2px -2px 0 0 currentColor;
+}
+
+.ico-close::before,
+.ico-close::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: -1px;
+  width: 1px;
+  height: 12px;
+  background: currentColor;
+}
+
+.ico-close::before {
+  transform: rotate(45deg);
+}
+
+.ico-close::after {
+  transform: rotate(-45deg);
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 1.25;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--neutral-0);
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn.danger {
+  border-color: var(--color-danger-border);
+  color: var(--color-fg-danger-soft);
+}

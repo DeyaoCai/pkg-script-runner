@@ -1,0 +1,46 @@
+{
+  "name": "@pkg-runner/runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pkg Runner — script runner UI · pty · glass",
+  "author": "DS Agent",
+  "main": "dist/main.js",
+  "files": [
+    "dist",
+    "dist-ui",
+    "ui",
+    "assets"
+  ],
+  "dependencies": {
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "@pkg-runner/web": "workspace:*",
+    "@types/node": "^20.0.0",
+    "electron": "35.7.5",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.5.0"
+  },
+  "scripts": {
+    "build:main": "node ./scripts/build-main.mjs",
+    "build:ui": "pnpm --filter @pkg-runner/web build",
+    "build": "pnpm build:main && pnpm build:ui",
+    "build:dev": "node ./scripts/build-main.mjs --dev",
+    "dev:ui": "pnpm --filter @pkg-runner/web dev",
+    "dev": "node ./scripts/dev.mjs",
+    "start": "electron .",
+    "ctl": "node ./scripts/ctl.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist dist-ui release",
+    "rebuild:native": "electron-rebuild -f -w node-pty",
+    "verify:pty": "node ./scripts/verify-pty.mjs",
+    "dist:win": "pnpm build && electron-builder --win portable --x64",
+    "dist:win:dir": "pnpm build && electron-builder --win dir --x64",
+    "install-context-menu": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-context-menu.ps1",
+    "uninstall-context-menu": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/uninstall-context-menu.ps1"
+  }
+}

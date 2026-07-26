@@ -1,0 +1,106 @@
+.body-pad {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: calc(var(--titlebar-height) + 10px) 14px 14px;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  --projects-w: 220px;
+}
+
+.projects-panel {
+  flex: 0 0 var(--projects-w);
+  width: var(--projects-w);
+  min-width: 108px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--app-radius);
+  overflow: hidden;
+}
+
+/* 收窄后隐藏项目删除按钮 */
+.projects-panel.is-narrow .project-item .btn-remove {
+  display: none;
+}
+
+.projects-panel.is-narrow .project-item {
+  grid-template-columns: 1fr;
+}
+
+.projects-panel.is-narrow .project-item-dir {
+  display: none;
+}
+
+.projects-panel.is-narrow .project-item-ratio {
+  display: none;
+}
+
+.projects-panel.is-narrow .scripts-head > span {
+  display: none;
+}
+
+.projects-panel.is-narrow #projectSearchInput {
+  max-width: none;
+  flex: 1;
+}
+
+.projects-panel.is-narrow .project-add-path input {
+  font-size: 11px;
+  padding: 5px 6px;
+}
+
+.body-pad > .main-split {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.body-pad > .split-resizer {
+  margin: 0 3px;
+}
+
+.project-list {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-tabs-wrap {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  flex: 0 0 auto;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 4px;
+}
+
+.list-nav-btn {
+  flex: 0 0 28px;
+  width: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  align-self: center;
+}
+
+.list-nav-btn:hover:not(:disabled) {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.list-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}

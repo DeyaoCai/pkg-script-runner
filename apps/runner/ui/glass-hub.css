@@ -1,0 +1,142 @@
+:root {
+  --bg: #1b1d21;
+  --panel: #24272c;
+  --border: #343841;
+  --text: #e8eaed;
+  --muted: #9aa0a6;
+  --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65), 0 0 1px rgba(0, 0, 0, 0.85);
+  --accent: #3d8bfd;
+  --row: #2a2e34;
+  --row-hover: #32373f;
+  --font: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  text-shadow: var(--text-shadow);
+  overflow: hidden;
+  user-select: none;
+}
+
+.hub {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border: 1px solid var(--border);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 6px 0 12px;
+  background: #15171b;
+  border-bottom: 1px solid var(--border);
+}
+
+.bar-drag {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.bar-drag strong {
+  font-size: 12px;
+}
+
+.tag {
+  font-size: 10px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.x {
+  -webkit-app-region: no-drag;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.x:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.body {
+  padding: 12px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--row);
+  color: var(--text);
+  padding: 8px 10px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.item:hover {
+  background: var(--row-hover);
+  border-color: #4c6fa8;
+}
+
+.item-title {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.item-meta {
+  font-size: 10px;
+  color: var(--muted);
+  grid-column: 1 / -1;
+  line-height: 1.4;
+}
+
+.item-go {
+  font-size: 11px;
+  color: var(--accent);
+}

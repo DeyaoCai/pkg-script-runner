@@ -1,0 +1,452 @@
+.scripts-panel,
+.log-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--app-radius);
+  overflow: hidden;
+}
+
+.scripts-panel {
+  flex: 0 0 var(--scripts-w);
+  width: var(--scripts-w);
+  min-width: 120px;
+}
+
+.log-panel {
+  flex: 1 1 0;
+  min-width: 220px;
+}
+
+.log-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 4px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  min-width: 0;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  border-bottom: none;
+}
+
+.log-tabs::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.log-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 160px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.log-tab:hover {
+  color: var(--text);
+  background: var(--row);
+}
+
+.log-tab.active {
+  color: var(--text);
+  background: var(--row);
+  border-color: var(--border);
+}
+
+.log-tab.running .log-tab-label {
+  color: var(--color-fg-subtle);
+}
+
+.log-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font);
+}
+
+.log-tab-close {
+  all: unset;
+  box-sizing: border-box;
+  opacity: 0.65;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.log-tab-close:hover {
+  opacity: 1;
+  color: var(--color-fg-danger);
+}
+
+.log-tab-restart {
+  all: unset;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  opacity: 0.75;
+  font-size: 13px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: var(--color-fg-subtle);
+  cursor: pointer;
+}
+
+.log-tab-restart:hover {
+  opacity: 1;
+  background: var(--color-accent-soft-strong);
+  color: var(--color-fg-on-accent);
+}
+
+.log-tab-stop {
+  all: unset;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  opacity: 0.85;
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 3px;
+  color: var(--color-fg-danger);
+  cursor: pointer;
+}
+
+.log-tab-stop:hover {
+  opacity: 1;
+  background: var(--color-danger-soft);
+  color: var(--color-fg-danger);
+}
+
+.log-views {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-views.is-shell-mosaic {
+  display: grid;
+  grid-template-columns: repeat(var(--shell-mosaic-cols, 2), minmax(0, 1fr));
+  grid-auto-rows: minmax(180px, 1fr);
+  gap: 8px;
+  padding: 8px;
+  overflow: auto;
+  align-content: stretch;
+}
+
+.log-views.is-shell-mosaic:has(.shell-pane:only-child),
+.log-views.is-shell-single {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  overflow: hidden;
+  grid-template-columns: unset;
+}
+
+.log-views.is-shell-mosaic:has(.shell-pane:only-child) .shell-pane,
+.log-views.is-shell-single .shell-pane {
+  flex: 1;
+  min-height: 0;
+}
+
+.log-tabs-wrap .log-tab-layout,
+.log-tabs-wrap .log-tab-add {
+  align-self: center;
+  margin: 0 2px 0 4px;
+}
+
+.log-tab-layout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.log-tab-layout:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--row-hover);
+}
+
+.log-tab-layout[data-layout='grid'] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.shell-layout-row {
+  display: flex;
+  gap: 6px;
+}
+
+.shell-layout-btn.is-active {
+  background: var(--color-accent-soft-strong);
+  border-color: var(--color-border-strong);
+  color: var(--color-fg-on-accent);
+}
+
+html[data-theme='light'] .shell-layout-btn.is-active {
+  background: var(--active);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.log-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.log-tab-add:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--row-hover);
+}
+
+.shell-pane {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.shell-pane.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.shell-pane-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.shell-pane-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-pane.is-running .shell-pane-title::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  vertical-align: middle;
+}
+
+.shell-pane-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shell-pane-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.shell-pane-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--row-hover);
+}
+
+.shell-pane .log-trim-banner {
+  border-radius: 0;
+}
+
+.shell-pane pre.log {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.shell-pane.is-job-pane pre.log {
+  /* 脚本面板无输入栏，输出区占满 */
+  padding-bottom: 8px;
+}
+
+.shell-pane-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--row);
+}
+
+.shell-pane-bar .shell-cwd {
+  max-width: 28%;
+}
+
+.shell-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.shell-bar[hidden] {
+  display: none !important;
+}
+
+.shell-cwd {
+  max-width: 36%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.shell-prompt {
+  color: var(--accent);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.shell-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--row);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+}
+
+.shell-pane-bar .shell-input {
+  background: var(--panel);
+  padding: 4px 8px;
+}
+
+.shell-input:focus {
+  border-color: var(--accent);
+}
+
+.shell-pane .xterm-host {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 4px 6px 8px;
+  overflow: hidden;
+  background: var(--color-term-bg);
+}
+
+.shell-pane .xterm {
+  height: 100%;
+}
+
+.shell-pane .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.shell-pane.is-running .shell-input {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.log-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-view[hidden] {
+  display: none;
+}
+
+.log-view .log-empty-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  user-select: none;
+}
+
+.log-trim-banner {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--color-warning-fg);
+  background: var(--color-warning-bg);
+  border-bottom: 1px solid var(--color-warning-border);
+  user-select: none;
+}

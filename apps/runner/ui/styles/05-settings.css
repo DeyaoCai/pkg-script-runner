@@ -1,0 +1,258 @@
+.font-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-card {
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 40px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-card .modal-title,
+.settings-card .modal-actions {
+  flex-shrink: 0;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-body .font-field span {
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.settings-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.settings-hint.is-error {
+  color: var(--color-fg-danger);
+}
+
+.settings-hint.is-recording {
+  color: var(--color-fg-subtle);
+}
+
+.settings-check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-check input {
+  grid-row: 1 / span 2;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-check > span {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.settings-check > em {
+  grid-column: 2;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hotkey-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hotkey-capture {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.hotkey-capture:hover {
+  border-color: var(--accent);
+  background: var(--row);
+}
+
+.hotkey-capture.is-recording {
+  border-color: var(--color-border-strong);
+  background: var(--color-accent-soft);
+  color: var(--color-fg-on-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent-inset);
+}
+
+.font-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.font-field span {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.font-field span em {
+  font-style: normal;
+  color: var(--text);
+  float: right;
+}
+
+.glass-field {
+  gap: 2px;
+}
+
+.glass-range {
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-number {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.settings-number:focus {
+  border-color: var(--accent);
+}
+
+.font-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.font-picker-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.font-picker-btn:hover,
+.font-picker-btn[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: var(--row);
+}
+
+.font-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-picker-caret {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.font-picker-menu {
+  z-index: 100;
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 10px 28px var(--color-shadow);
+  padding: 4px;
+}
+
+.font-picker-menu[hidden] {
+  display: none;
+}
+
+.font-picker-option {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.font-picker-option:hover {
+  background: var(--row-hover);
+}
+
+.font-picker-option.is-active {
+  background: var(--color-accent-fill);
+  color: var(--neutral-0);
+}
+
+.project-add-path input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: var(--font);
+  outline: none;
+}
+
+.project-add-path input:focus {
+  border-color: var(--accent);
+}

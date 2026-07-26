@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+release-stage/
+ui/fonts/
+ui/fonts-catalog.js
+ui/vendor/
+*.exe
+*.blockmap
+builder-effective-config.yaml
+builder-debug.yml
+.DS_Store
+*.log
