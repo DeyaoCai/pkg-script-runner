@@ -1,0 +1,29 @@
+{
+  "name": "@pkg-runner/controller",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lightweight Vue Controller base (data / props / state)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.0",
+    "typescript": "^5.5.0",
+    "vue": "^3.5.0"
+  }
+}

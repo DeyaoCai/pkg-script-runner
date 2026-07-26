@@ -1,0 +1,52 @@
+{
+  "name": "@pkg-runner/shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared Electron shell: frameless window IPC, reveal in OS explorer, tip directive, window controls",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./main": {
+      "types": "./dist/main/index.d.ts",
+      "import": "./dist/main/index.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer/index.d.ts",
+      "import": "./dist/renderer/index.js"
+    },
+    "./preload": {
+      "types": "./dist/preload/index.d.ts",
+      "import": "./dist/preload/index.js"
+    },
+    "./renderer/WindowControls.vue": "./src/renderer/WindowControls.vue",
+    "./renderer/tip.css": "./src/renderer/tip.css",
+    "./renderer/drag.css": "./src/renderer/drag.css",
+    "./renderer/window-controls.css": "./src/renderer/window-controls.css"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src/renderer/*.vue",
+    "src/renderer/*.css"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "electron": ">=35",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "electron": "35.7.5",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.5.0",
+    "vue": "^3.5.0"
+  }
+}

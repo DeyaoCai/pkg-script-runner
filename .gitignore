@@ -1,6 +1,19 @@
 # IDE
 .idea/
+.vscode/
 
 # OS / logs
 .DS_Store
+Thumbs.db
 *.log
+
+# deps / build
+node_modules/
+**/dist/
+**/dist-ui/
+**/release/
+*.tsbuildinfo
+
+# Electron
+apps/desktop/ui/fonts/
+apps/desktop/ui/vendor/

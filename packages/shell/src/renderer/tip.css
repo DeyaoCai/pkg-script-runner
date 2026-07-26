@@ -1,0 +1,44 @@
+/* Custom tooltip — replaces native title */
+.pkg-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: var(--panel, #1c1f24);
+  color: var(--text, #e8eaed);
+  font-family: var(--sans, inherit);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+
+.pkg-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.pkg-tooltip[data-place='below'] {
+  transform: translateY(2px);
+}
+
+.pkg-tooltip[data-place='below'].is-visible {
+  transform: translateY(0);
+}
+
+.pkg-tooltip[data-place='above'] {
+  transform: translateY(-2px);
+}
+
+.pkg-tooltip[data-place='above'].is-visible {
+  transform: translateY(0);
+}
