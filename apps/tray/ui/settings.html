@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>设置</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #1a1d23;
+        --fg: #e8eaed;
+        --muted: #9aa0a6;
+        --line: #2d323c;
+        --accent: #3d8bfd;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 13px/1.45 system-ui, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        padding: 16px 18px 20px;
+      }
+      h1 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0 0 16px;
+      }
+      .sec {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin: 16px 0 10px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      label.field {
+        min-width: 100px;
+        color: var(--muted);
+      }
+      .btn {
+        border: 1px solid var(--line);
+        background: #252a33;
+        color: var(--fg);
+        border-radius: 6px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        border-color: #4a5160;
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      select,
+      input[type='number'],
+      input[type='range'] {
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: #12151a;
+        color: var(--fg);
+        padding: 6px 8px;
+      }
+      select {
+        min-width: 160px;
+      }
+      input[type='range'] {
+        flex: 1;
+        padding: 0;
+      }
+      .err {
+        color: #f28b82;
+        min-height: 1.2em;
+        margin: 8px 0;
+        font-size: 12px;
+      }
+      .footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 18px;
+      }
+      .recording {
+        outline: 1px solid var(--accent);
+      }
+      .check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .grow {
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>设置</h1>
+    <p class="sub">托盘 / Runner / 编辑器共用</p>
+
+    <div class="sec">外观</div>
+    <div class="row">
+      <label class="field">字体</label>
+      <select id="fontId"></select>
+    </div>
+    <div class="row">
+      <label class="field">主题</label>
+      <select id="theme">
+        <option value="dark">深色</option>
+        <option value="light">浅色</option>
+      </select>
+    </div>
+    <div class="row">
+      <label class="field">面板透明度</label>
+      <input type="range" id="glassAlpha" min="10" max="100" step="1" class="grow" />
+      <span id="glassAlphaVal" style="min-width: 36px; color: var(--muted)">55%</span>
+    </div>
+    <label class="check">
+      <input type="checkbox" id="alwaysOnTop" />
+      <span>Runner 始终置顶</span>
+    </label>
+
+    <div class="sec">Runner</div>
+    <div class="row">
+      <label class="field">Shell 列数</label>
+      <input type="number" id="shellMosaicCols" min="1" max="4" step="1" />
+    </div>
+    <div class="row">
+      <label class="field">Shell 布局</label>
+      <select id="shellLayout">
+        <option value="grid">网格</option>
+        <option value="single">单页</option>
+      </select>
+    </div>
+    <label class="check">
+      <input type="checkbox" id="persistLogs" />
+      <span>脚本日志落盘</span>
+    </label>
+
+    <div class="sec">热键</div>
+    <div class="row">
+      <label class="field">截屏</label>
+      <button type="button" class="btn grow" id="shotHotkeyBtn">未设置</button>
+      <button type="button" class="btn" id="clearShot">清除</button>
+    </div>
+    <div class="row">
+      <label class="field">显示 Runner</label>
+      <button type="button" class="btn grow" id="actHotkeyBtn">未设置</button>
+      <button type="button" class="btn" id="clearAct">清除</button>
+    </div>
+    <div class="row">
+      <label class="field">截屏历史条数</label>
+      <input type="number" id="historyLimit" min="1" max="100" />
+    </div>
+
+    <div class="err" id="err"></div>
+    <div class="footer">
+      <button type="button" class="btn" id="closeBtn">关闭</button>
+      <button type="button" class="btn primary" id="saveBtn">保存</button>
+    </div>
+    <script>
+      const api = window.trayApi;
+      const FONTS = [
+        { id: 'jetbrains', label: 'JetBrains Mono' },
+        { id: 'system', label: '系统默认' },
+        { id: 'segoe', label: 'Segoe UI' },
+        { id: 'cascadia', label: 'Cascadia Code' },
+        { id: 'consolas', label: 'Consolas' },
+      ];
+      let recording = null;
+      let pendingShot = '';
+      let pendingAct = '';
+
+      function formatHotkey(accel) {
+        const raw = String(accel || '').trim();
+        if (!raw) return '未设置 · 点击录制';
+        return raw
+          .replace(/CommandOrControl/gi, 'Ctrl')
+          .replace(/Control/gi, 'Ctrl')
+          .replace(/Shift/gi, 'Shift')
+          .replace(/Alt/gi, 'Alt');
+      }
+
+      function keyToAccel(e) {
+        if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return '';
+        const parts = [];
+        if (e.ctrlKey || e.metaKey) parts.push('CommandOrControl');
+        if (e.altKey) parts.push('Alt');
+        if (e.shiftKey) parts.push('Shift');
+        let key = e.key;
+        if (key === ' ') key = 'Space';
+        else if (key.length === 1) key = key.toUpperCase();
+        else if (key.startsWith('Arrow')) key = key.slice(5);
+        parts.push(key);
+        return parts.join('+');
+      }
+
+      const fontSel = document.getElementById('fontId');
+      for (const f of FONTS) {
+        const o = document.createElement('option');
+        o.value = f.id;
+        o.textContent = f.label;
+        fontSel.appendChild(o);
+      }
+
+      document.getElementById('glassAlpha').oninput = (e) => {
+        document.getElementById('glassAlphaVal').textContent = e.target.value + '%';
+      };
+
+      async function load() {
+        const s = await api.getSettings();
+        pendingShot = s.screenshotHotkey || '';
+        pendingAct = s.activateHotkey || '';
+        document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
+        document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
+        document.getElementById('historyLimit').value = String(s.screenshotHistoryLimit);
+        fontSel.value = s.fontId || 'jetbrains';
+        document.getElementById('theme').value = s.theme || 'dark';
+        document.getElementById('glassAlpha').value = String(s.glassAlpha ?? 55);
+        document.getElementById('glassAlphaVal').textContent = (s.glassAlpha ?? 55) + '%';
+        document.getElementById('alwaysOnTop').checked = !!s.alwaysOnTop;
+        document.getElementById('shellMosaicCols').value = String(s.shellMosaicCols ?? 2);
+        document.getElementById('shellLayout').value = s.shellLayout || 'grid';
+        document.getElementById('persistLogs').checked = !!s.persistLogs;
+      }
+
+      async function startRecord(kind) {
+        recording = kind;
+        const btn = kind === 'screenshot' ? 'shotHotkeyBtn' : 'actHotkeyBtn';
+        document.getElementById(btn).classList.add('recording');
+        document.getElementById(btn).textContent = '按下热键…';
+        document.getElementById('err').textContent = '';
+        await api.suspendHotkeys();
+      }
+
+      document.getElementById('shotHotkeyBtn').onclick = () => startRecord('screenshot');
+      document.getElementById('actHotkeyBtn').onclick = () => startRecord('activate');
+      document.getElementById('clearShot').onclick = () => {
+        pendingShot = '';
+        document.getElementById('shotHotkeyBtn').textContent = formatHotkey('');
+      };
+      document.getElementById('clearAct').onclick = () => {
+        pendingAct = '';
+        document.getElementById('actHotkeyBtn').textContent = formatHotkey('');
+      };
+
+      window.addEventListener('keydown', async (e) => {
+        if (!recording) return;
+        e.preventDefault();
+        if (e.key === 'Escape') {
+          const kind = recording;
+          recording = null;
+          document.getElementById('shotHotkeyBtn').classList.remove('recording');
+          document.getElementById('actHotkeyBtn').classList.remove('recording');
+          document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
+          document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
+          await api.resumeHotkeys();
+          return;
+        }
+        const accel = keyToAccel(e);
+        if (!accel) return;
+        if (recording === 'screenshot') pendingShot = accel;
+        else pendingAct = accel;
+        recording = null;
+        document.getElementById('shotHotkeyBtn').classList.remove('recording');
+        document.getElementById('actHotkeyBtn').classList.remove('recording');
+        document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
+        document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
+        await api.resumeHotkeys();
+      });
+
+      document.getElementById('saveBtn').onclick = async () => {
+        const res = await api.setSettings({
+          screenshotHotkey: pendingShot,
+          activateHotkey: pendingAct,
+          screenshotHistoryLimit: Number(document.getElementById('historyLimit').value),
+          fontId: fontSel.value,
+          theme: document.getElementById('theme').value,
+          glassAlpha: Number(document.getElementById('glassAlpha').value),
+          alwaysOnTop: document.getElementById('alwaysOnTop').checked,
+          shellMosaicCols: Number(document.getElementById('shellMosaicCols').value),
+          shellLayout: document.getElementById('shellLayout').value,
+          persistLogs: document.getElementById('persistLogs').checked,
+        });
+        if (res.hotkeyError) {
+          document.getElementById('err').textContent = res.hotkeyError;
+          pendingShot = res.settings.screenshotHotkey;
+          pendingAct = res.settings.activateHotkey;
+          document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
+          document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
+          return;
+        }
+        document.getElementById('err').textContent = '';
+        await api.closeWindow();
+      };
+
+      document.getElementById('closeBtn').onclick = () => api.closeWindow();
+      load();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,45 @@
+appId: local.pkg-runner.tray
+productName: Pkg Runner
+copyright: Copyright © DS Agent
+artifactName: PkgRunner-Tray-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: assets
+files:
+  - dist/**/*
+  - ui/**/*
+  - assets/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/*.pdb'
+  - '!**/*.ts'
+  - '!**/tsconfig*.json'
+  - '!**/node_modules/koffi/doc/**'
+  - '!**/node_modules/koffi/vendor/**'
+  - '!**/node_modules/koffi/**/*.{md,cc,hh,h,c,S,asm,cmake,txt}'
+  - '!**/node_modules/**/{README,CHANGELOG,HISTORY,LICENSE,LICENCE,NOTICE}*'
+  - '!**/node_modules/**/{test,tests,__tests__,docs,example,examples,benchmark}/**'
+asar: true
+asarUnpack:
+  - '**/*.node'
+  - '**/koffi/**/*.node'
+  - '**/@koromix/koffi-*/**'
+electronLanguages:
+  - en-US
+  - zh-CN
+compression: maximum
+npmRebuild: false
+extraResources:
+  - from: release-stage/apps
+    to: apps
+    filter:
+      - '**/*'
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: assets/icon.png
+  executableName: PkgRunnerTray
+portable:
+  artifactName: PkgRunner-Tray-${version}-portable.exe

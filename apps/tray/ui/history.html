@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>截屏历史</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #1a1d23;
+        --fg: #e8eaed;
+        --muted: #9aa0a6;
+        --line: #2d323c;
+        --accent: #3d8bfd;
+        --card: #22262e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 13px/1.45 system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .btn {
+        border: 1px solid var(--line);
+        background: #252a33;
+        color: var(--fg);
+        border-radius: 6px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        border-color: #4a5160;
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .btn.danger {
+        color: #f28b82;
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .list {
+        flex: 1;
+        overflow: auto;
+        padding: 12px 14px;
+      }
+      .empty {
+        color: var(--muted);
+        padding: 24px 8px;
+      }
+      .item {
+        display: flex;
+        gap: 12px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--card);
+        margin-bottom: 10px;
+        cursor: pointer;
+      }
+      .item.is-selected {
+        border-color: var(--accent);
+      }
+      .item img {
+        width: 96px;
+        height: 64px;
+        object-fit: cover;
+        border-radius: 4px;
+        background: #111;
+      }
+      .meta {
+        flex: 1;
+        min-width: 0;
+      }
+      .time {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .text {
+        margin-top: 4px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <button type="button" class="btn primary" id="newBtn">新截屏</button>
+      <button type="button" class="btn" id="dirBtn">目录</button>
+      <button type="button" class="btn" id="exportMd" disabled>导出 MD</button>
+      <button type="button" class="btn" id="exportHtml" disabled>导出 HTML</button>
+      <button type="button" class="btn danger" id="clearBtn">清空</button>
+      <button type="button" class="btn" id="closeBtn">关闭</button>
+    </div>
+    <div class="list" id="list"></div>
+    <script>
+      const api = window.trayApi;
+      const selected = new Set();
+      let items = [];
+
+      function fmt(ts) {
+        try {
+          return new Date(ts).toLocaleString();
+        } catch {
+          return String(ts);
+        }
+      }
+
+      function syncExport() {
+        const on = selected.size > 0;
+        document.getElementById('exportMd').disabled = !on;
+        document.getElementById('exportHtml').disabled = !on;
+      }
+
+      function toggle(id) {
+        if (selected.has(id)) selected.delete(id);
+        else selected.add(id);
+        render();
+      }
+
+      function render() {
+        const root = document.getElementById('list');
+        if (!items.length) {
+          root.innerHTML = '<div class="empty">暂无截屏 · 点「新截屏」或托盘「截屏」</div>';
+          syncExport();
+          return;
+        }
+        root.innerHTML = items
+          .map((item) => {
+            const sel = selected.has(item.id) ? ' is-selected' : '';
+            const checked = selected.has(item.id) ? 'checked' : '';
+            return `<div class="item${sel}" data-id="${item.id}">
+              <label @click.stop><input type="checkbox" data-check="${item.id}" ${checked} /></label>
+              <img alt="" src="${item.thumbDataUrl || ''}" />
+              <div class="meta">
+                <div class="time">${fmt(item.createdAt)}</div>
+                <div class="text">${(item.text || '（无标记文案）').replace(/</g, '&lt;')}</div>
+                <div class="actions">
+                  <button type="button" class="btn" data-copy="${item.id}" data-which="both">图文</button>
+                  <button type="button" class="btn" data-copy="${item.id}" data-which="image">图片</button>
+                  <button type="button" class="btn" data-copy="${item.id}" data-which="text">文案</button>
+                  <button type="button" class="btn" data-rm="${item.id}">删除</button>
+                </div>
+              </div>
+            </div>`;
+          })
+          .join('');
+        syncExport();
+      }
+
+      async function refresh() {
+        items = (await api.listScreenshotHistory()) || [];
+        const ids = new Set(items.map((x) => x.id));
+        for (const id of [...selected]) if (!ids.has(id)) selected.delete(id);
+        render();
+      }
+
+      document.getElementById('list').addEventListener('click', async (e) => {
+        const t = e.target;
+        if (!(t instanceof HTMLElement)) return;
+        const check = t.getAttribute('data-check') || (t.closest('[data-check]') && null);
+        if (t.matches('input[data-check]')) {
+          toggle(t.getAttribute('data-check'));
+          return;
+        }
+        const copyId = t.getAttribute('data-copy');
+        if (copyId) {
+          e.stopPropagation();
+          await api.copyScreenshotHistory(copyId, t.getAttribute('data-which') || 'both');
+          return;
+        }
+        const rm = t.getAttribute('data-rm');
+        if (rm) {
+          e.stopPropagation();
+          await api.removeScreenshotHistory(rm);
+          await refresh();
+          return;
+        }
+        const item = t.closest('.item');
+        if (item) toggle(item.getAttribute('data-id'));
+      });
+
+      document.getElementById('newBtn').onclick = () => api.startScreenshot();
+      document.getElementById('dirBtn').onclick = () => api.openScreenshotHistoryDir();
+      document.getElementById('exportMd').onclick = () =>
+        api.exportScreenshotHistory([...selected], 'md');
+      document.getElementById('exportHtml').onclick = () =>
+        api.exportScreenshotHistory([...selected], 'html');
+      document.getElementById('clearBtn').onclick = async () => {
+        await api.clearScreenshotHistory();
+        await refresh();
+      };
+      document.getElementById('closeBtn').onclick = () => api.closeWindow();
+
+      api.onHistoryChanged(() => refresh());
+      refresh();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+release-stage/
+*.exe
+*.blockmap
+builder-effective-config.yaml
+builder-debug.yml
+.DS_Store
+*.log
