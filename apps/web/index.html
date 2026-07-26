@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pkg Runner</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('pkg-runner-theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+          var a = Number(localStorage.getItem('pkg-runner:glass-alpha'));
+          if (isFinite(a)) {
+            document.documentElement.style.setProperty(
+              '--glass-alpha',
+              String(Math.min(100, Math.max(10, Math.round(a))) / 100),
+            );
+          }
+          var b = Number(localStorage.getItem('pkg-runner:glass-blur'));
+          if (isFinite(b)) {
+            document.documentElement.style.setProperty(
+              '--glass-blur',
+              Math.min(40, Math.max(0, Math.round(b))) + 'px',
+            );
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
