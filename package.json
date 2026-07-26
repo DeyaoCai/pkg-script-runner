@@ -1,0 +1,47 @@
+{
+  "name": "pkg-script-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pkg Runner monorepo — tray host + runner + editor",
+  "scripts": {
+    "bootstrap": "node ./scripts/bootstrap.mjs",
+    "dev": "pnpm --filter @pkg-runner/tray dev",
+    "dev:tray": "pnpm --filter @pkg-runner/tray dev",
+    "dev:runner": "pnpm --filter @pkg-runner/runner dev",
+    "dev:web": "pnpm --filter @pkg-runner/web dev",
+    "dev:code-editor": "pnpm --filter @pkg-runner/code-editor dev",
+    "dev:all": "pnpm --filter @pkg-runner/tray dev & pnpm --filter @pkg-runner/runner dev & pnpm --filter @pkg-runner/code-editor dev",
+    "build": "pnpm --filter @pkg-runner/controller build && pnpm --filter @pkg-runner/shell build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/web build",
+    "build:web": "pnpm --filter @pkg-runner/web build",
+    "build:tray": "pnpm --filter @pkg-runner/tray build",
+    "build:runner": "pnpm --filter @pkg-runner/runner build",
+    "build:code-editor": "pnpm --filter @pkg-runner/code-editor build",
+    "start": "pnpm --filter @pkg-runner/tray start",
+    "start:runner": "pnpm --filter @pkg-runner/runner start",
+    "start:code-editor": "pnpm --filter @pkg-runner/code-editor start",
+    "typecheck": "pnpm -r run typecheck",
+    "check:vue-controller": "node ./scripts/check-vue-controller.mjs",
+    "check": "pnpm typecheck && pnpm check:vue-controller",
+    "clean": "pnpm -r run clean && rimraf node_modules",
+    "rebuild:native": "pnpm --filter @pkg-runner/runner rebuild:native",
+    "dist:win": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/runner dist:win && pnpm --filter @pkg-runner/code-editor dist:win && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win",
+    "dist:win:dir": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/runner dist:win:dir && pnpm --filter @pkg-runner/tray dist:win:dir"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "koffi",
+      "node-pty"
+    ]
+  }
+}
