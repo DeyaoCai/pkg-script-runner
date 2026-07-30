@@ -4,8 +4,6 @@ const api = window.pkgRunner;
 const SEARCH_PREFIX = 'pkg-runner:search:';
 const PROJECT_SEARCH_KEY = 'pkg-runner:project-search';
 const SCRIPTS_WIDTH_KEY = 'pkg-runner:scripts-w';
-const FONT_KEY = 'pkg-runner:font';
-const GLASS_ALPHA_KEY = 'pkg-runner:glass-alpha';
 const GLASS_BLUR_KEY = 'pkg-runner:glass-blur';
 const DEFAULT_GLASS_ALPHA_PCT = 55;
 const DEFAULT_GLASS_BLUR_PX = 22;
@@ -148,16 +146,6 @@ let recordingHotkeyKind = null;
 /** @type {ResizeObserver | null} */
 /** @type {ReturnType<typeof setTimeout> | null} */
 let saveSettingsTimer = null;
-/** @type {ReturnType<typeof setTimeout> | null} */
-let saveHistoryLimitTimer = null;
-/** 串行化 setSettings，避免并发回包互相覆盖 */
-let settingsWriteChain = Promise.resolve();
-/**
- * 已乐观写入、尚未被对应 setSettings 回包确认的字段。
- * 用于挡住并行/乱序回包把 shellLayout 等打回旧值。
- * @type {Record<string, unknown>}
- */
-let pendingSettingsPatch = {};
 let saveTimer = null;
 let popoverHideTimer = null;
 /** @type {ReturnType<typeof setTimeout> | null} */
@@ -1590,19 +1578,8 @@ function startHotkeyRecording(kind) {
   syncHotkeysUi();
 }
 
-async function applyHotkey(kind, accel) {
-  if (typeof api.setSettings !== 'function') return;
-  const patch =
-    kind === 'screenshot'
-      ? { screenshotHotkey: accel ?? '' }
-      : { activateHotkey: accel ?? '' };
-  const res = await api.setSettings(patch);
-  applySettingsState(res.settings);
-  syncHotkeysUi({
-    kind,
-    error: res.hotkeyError || undefined,
-  });
-  if (!res.hotkeyError) stopHotkeyRecording();
+async function applyHotkey(_kind, _accel) {
+  void api.openTraySettings?.();
 }
 
 function ensureThemePanelOnBody() {
@@ -1659,19 +1636,11 @@ function syncThemePanelUi() {
 
 function setThemeChoice(theme) {
   const next = theme === 'light' ? 'light' : 'dark';
-  applyTheme(next);
-  appSettings.theme = next;
-  syncThemePanelUi();
-  void persistSettingsPatch({ theme: next });
+  void requestTraySettingsPatch({ theme: next });
 }
 
 function openSettingsModal() {
-  if (!settingsModal) return;
-  closeThemePanel();
-  stopHotkeyRecording();
-  closeFontPicker();
-  settingsModal.hidden = false;
-  syncHotkeysUi();
+  void api.openTraySettings?.();
 }
 
 function closeSettingsModal() {
@@ -1900,28 +1869,6 @@ function syncFontPickerUi(presets, selectedId) {
   }
 }
 
-function readLocalFontId(presets, fallback) {
-  try {
-    const id = localStorage.getItem(FONT_KEY);
-    if (id && presets.some((p) => p.id === id)) return id;
-    const legacy = localStorage.getItem('pkg-runner:mono-font');
-    if (legacy && presets.some((p) => p.id === legacy)) return legacy;
-  } catch {
-    /* ignore */
-  }
-  return fallback || '';
-}
-
-function readLocalGlassAlpha() {
-  try {
-    const n = Number(localStorage.getItem(GLASS_ALPHA_KEY));
-    if (Number.isFinite(n)) return Math.min(100, Math.max(10, Math.round(n)));
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
 function readLocalGlassBlur() {
   try {
     const n = Number(localStorage.getItem(GLASS_BLUR_KEY));
@@ -1994,7 +1941,7 @@ function applyShellLayoutLocally(next) {
 async function toggleShellLayout() {
   const next = appSettings.shellLayout === 'grid' ? 'single' : 'grid';
   applyShellLayoutLocally(next);
-  void persistSettingsPatch({ shellLayout: next });
+  void requestTraySettingsPatch({ shellLayout: next });
 }
 
 async function setShellLayout(layout) {
@@ -2009,17 +1956,12 @@ async function setShellLayout(layout) {
     return;
   }
   applyShellLayoutLocally(next);
-  void persistSettingsPatch({ shellLayout: next });
+  void requestTraySettingsPatch({ shellLayout: next });
 }
 
 function applyTheme(theme) {
   const t = theme === 'light' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', t);
-  try {
-    localStorage.setItem('pkg-runner-theme', t);
-  } catch {
-    /* ignore */
-  }
   if (themeBtn) {
     themeBtn.title = t === 'dark' ? '主题设置 · 当前暗色' : '主题设置 · 当前浅色';
   }
@@ -2047,10 +1989,7 @@ function syncScreenshotHistoryLimitUi(limit) {
   if (ssHistoryBtn) ssHistoryBtn.title = `截屏历史（最多 ${n} 条）`;
 }
 
-function pickSetting(key, fromHost, fallback) {
-  if (Object.prototype.hasOwnProperty.call(pendingSettingsPatch, key)) {
-    return pendingSettingsPatch[key];
-  }
+function pickSetting(_key, fromHost, fallback) {
   return fromHost !== undefined ? fromHost : fallback;
 }
 
@@ -2130,33 +2069,13 @@ function applySettingsState(settings) {
   }
 }
 
-async function persistSettingsPatch(patch) {
-  if (typeof api.setSettings !== 'function') return;
+async function requestTraySettingsPatch(patch) {
   if (!patch || typeof patch !== 'object') return;
-
-  Object.assign(pendingSettingsPatch, patch);
-
-  const run = async () => {
-    const res = await api.setSettings(patch);
-    for (const key of Object.keys(patch)) {
-      // 仅清除仍等于本次写入值的 pending，保留期间又改过的乐观值
-      if (pendingSettingsPatch[key] === patch[key]) {
-        delete pendingSettingsPatch[key];
-      }
-    }
-    applySettingsState(res.settings);
-    if (res.hotkeyError) {
-      syncHotkeysUi({ error: res.hotkeyError });
-    }
-    return res;
-  };
-
-  const p = settingsWriteChain.then(run, run);
-  settingsWriteChain = p.then(
-    () => undefined,
-    () => undefined,
-  );
-  return p;
+  if (typeof api.requestTraySettingsPatch === 'function') {
+    await api.requestTraySettingsPatch(patch);
+    return;
+  }
+  void api.openTraySettings?.();
 }
 
 async function onFontChange(nextId) {
@@ -2164,25 +2083,13 @@ async function onFontChange(nextId) {
   if (!fonts || !nextId) return;
   fonts.applyDocumentFonts({ fontId: nextId });
   syncFontPickerUi(fonts.FONT_PRESETS, nextId);
-  appSettings.fontId = nextId;
-  try {
-    localStorage.setItem(FONT_KEY, nextId);
-  } catch {
-    /* ignore */
-  }
-  await persistSettingsPatch({ fontId: nextId });
+  await requestTraySettingsPatch({ fontId: nextId });
 }
 
 function scheduleGlassPersist(pct) {
   clearTimeout(saveSettingsTimer);
   saveSettingsTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(GLASS_ALPHA_KEY, String(pct));
-      localStorage.setItem(GLASS_BLUR_KEY, String(readLocalGlassBlur()));
-    } catch {
-      /* ignore */
-    }
-    void persistSettingsPatch({ glassAlpha: pct });
+    void requestTraySettingsPatch({ glassAlpha: pct });
   }, 120);
 }
 
@@ -2197,51 +2104,13 @@ function scheduleGlassBlurPersist(blurPx) {
   }, 120);
 }
 
-async function initSettingsFromHost() {
-  const fonts = window.PkgFonts;
-  const localFont = fonts
-    ? readLocalFontId(fonts.FONT_PRESETS, fonts.DEFAULT_FONT_ID)
-    : 'jetbrains';
-  const localAlpha = readLocalGlassAlpha();
-
-  let settings =
-    typeof api.getSettings === 'function'
-      ? await api.getSettings()
-      : {
-          fontId: localFont,
-          glassAlpha: localAlpha ?? DEFAULT_GLASS_ALPHA_PCT,
-          theme: 'dark',
-          shellMosaicCols: DEFAULT_SHELL_MOSAIC_COLS,
-          shellLayout: 'grid',
-          alwaysOnTop: false,
-          screenshotHotkey: DEFAULT_SCREENSHOT_HOTKEY,
-          activateHotkey: DEFAULT_ACTIVATE_HOTKEY,
-          screenshotHistoryLimit: DEFAULT_SCREENSHOT_HISTORY_LIMIT,
-        };
-
-  // 首次迁移：prefs 仍是默认值时，带回 localStorage 里的旧配置
-  const patch = {};
-  if (
-    fonts &&
-    settings.fontId === fonts.DEFAULT_FONT_ID &&
-    localFont &&
-    localFont !== fonts.DEFAULT_FONT_ID
-  ) {
-    patch.fontId = localFont;
+async function syncSettingsFromTray() {
+  if (typeof api.getSettings !== 'function') return;
+  try {
+    applySettingsState(await api.getSettings());
+  } catch {
+    /* tray not ready */
   }
-  if (
-    settings.glassAlpha === DEFAULT_GLASS_ALPHA_PCT &&
-    localAlpha != null &&
-    localAlpha !== DEFAULT_GLASS_ALPHA_PCT
-  ) {
-    patch.glassAlpha = localAlpha;
-  }
-  if (Object.keys(patch).length && typeof api.setSettings === 'function') {
-    const res = await api.setSettings(patch);
-    settings = res.settings;
-  }
-
-  applySettingsState(settings);
 }
 
 glassAlphaRange?.addEventListener('input', () => {
@@ -2272,7 +2141,7 @@ shellColsRange?.addEventListener('input', () => {
   appSettings.shellMosaicCols = n;
   clearTimeout(saveShellColsTimer);
   saveShellColsTimer = setTimeout(() => {
-    void persistSettingsPatch({ shellMosaicCols: n });
+    void requestTraySettingsPatch({ shellMosaicCols: n });
   }, 120);
 });
 
@@ -2286,7 +2155,7 @@ document.querySelectorAll('[data-shell-layout]').forEach((btn) => {
 alwaysOnTopCheck?.addEventListener('change', () => {
   const on = !!alwaysOnTopCheck.checked;
   appSettings.alwaysOnTop = on;
-  void persistSettingsPatch({ alwaysOnTop: on });
+  void requestTraySettingsPatch({ alwaysOnTop: on });
 });
 
 function scheduleHistoryLimitPersist(raw) {
@@ -2295,9 +2164,7 @@ function scheduleHistoryLimitPersist(raw) {
     const n = clampScreenshotHistoryLimit(raw);
     if (ssHistoryLimitInput) ssHistoryLimitInput.value = String(n);
     appSettings.screenshotHistoryLimit = n;
-    void persistSettingsPatch({ screenshotHistoryLimit: n }).then(() => {
-      if (ssHistoryModal && !ssHistoryModal.hidden) void refreshScreenshotHistoryList();
-    });
+    void requestTraySettingsPatch({ screenshotHistoryLimit: n });
   }, 200);
 }
 
@@ -2356,7 +2223,6 @@ document.addEventListener(
   true,
 );
 
-void initSettingsFromHost();
 
 function syncMaximizedUi(v) {
   maximized = v;
@@ -2796,13 +2662,16 @@ clearDiskLogsBtn?.addEventListener('click', async () => {
 });
 
 persistLogBtn?.addEventListener('click', async () => {
-  const next = await api.setPersistLogs(!persistLogs);
-  syncPersistLogsUi(next);
+  await requestTraySettingsPatch({ persistLogs: !persistLogs });
 });
 
 
 
 settingsBtn?.addEventListener('click', () => {
+  if (typeof api.openTraySettings === 'function') {
+    void api.openTraySettings();
+    return;
+  }
   openSettingsModal();
 });
 
@@ -3060,7 +2929,14 @@ api.onOpenDir((dir) => {
   void addProjectFromDir(dir);
 });
 api.onSettings?.((settings) => applySettingsState(settings));
-api.onOpenSettings?.(() => openSettingsModal());
+void syncSettingsFromTray();
+api.onOpenSettings?.(() => {
+  if (typeof api.openTraySettings === 'function') {
+    void api.openTraySettings();
+    return;
+  }
+  openSettingsModal();
+});
 api.onOpenScreenshotHistory?.(() => {
   void openScreenshotHistoryModal();
 });
@@ -3118,8 +2994,25 @@ document.addEventListener(
 );
 
 (async () => {
-  syncPersistLogsUi(await api.getPersistLogs());
-  syncMaximizedUi(await api.windowIsMaximized());
-  setJobs(await api.getJobs());
-  await applyProjectsState(await api.getProjects());
+  if (!api) return;
+  try {
+    syncPersistLogsUi(await api.getPersistLogs());
+  } catch {
+    /* ignore */
+  }
+  try {
+    syncMaximizedUi(await api.windowIsMaximized());
+  } catch {
+    /* ignore */
+  }
+  try {
+    setJobs(await api.getJobs());
+  } catch {
+    /* ignore */
+  }
+  try {
+    await applyProjectsState(await api.getProjects());
+  } catch {
+    /* ignore */
+  }
 })();

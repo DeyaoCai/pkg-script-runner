@@ -51,15 +51,12 @@ export type PkgRunnerApi = {
   shellCwd: (id: string) => Promise<{ cwd: string; title: string; dir: string } | null>;
   getJobs: () => Promise<JobInfo[]>;
   getSettings: () => Promise<AppSettings>;
-  setSettings: (
-    patch: Partial<AppSettings>,
-  ) => Promise<{ settings: AppSettings; hotkeyError: string | null }>;
+  openTraySettings: () => Promise<void>;
+  requestTraySettingsPatch: (patch: Partial<AppSettings>) => Promise<void>;
   suspendHotkeys: () => Promise<void>;
   resumeHotkeys: () => Promise<void>;
   getPersistLogs: () => Promise<boolean>;
-  setPersistLogs: (enabled: boolean) => Promise<boolean>;
   openLogsDir: () => Promise<{ ok: boolean; dir: string; error: string | null }>;
-  openSharedSettings?: () => Promise<void>;
   clearDiskLogs: () => Promise<{ ok: boolean; removed: number; dir: string }>;
   openGlassLabs?: () => Promise<void>;
   openGlassLab?: (kind: string) => Promise<void>;
@@ -80,7 +77,6 @@ export type PkgRunnerApi = {
   onShellData: (cb: (payload: { id: string; data: string }) => void) => () => void;
   onOpenDir: (cb: (dir: string) => void) => () => void;
   onSettings: (cb: (settings: AppSettings) => void) => () => void;
-  onOpenSettings?: (cb: () => void) => () => void;
   onPersistLogs: (cb: (enabled: boolean) => void) => () => void;
   onProjects: (cb: (state: ProjectsState) => void) => () => void;
 };

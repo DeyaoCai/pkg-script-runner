@@ -128,6 +128,8 @@ export type ControlServerHandles = {
   runScript: (req: RunScriptRequest) => Omit<RunScriptResult, 'at'>;
   onFlushed?: (result: FlushDiskLogsResult) => void;
   onRunScript?: (result: RunScriptResult) => void;
+  applySettings?: (settings: unknown) => void;
+  onToggleWindow?: () => void;
 };
 
 export type ControlServer = {
@@ -208,6 +210,31 @@ export async function startControlServer(
       if (method === 'POST' && pathname === '/v1/flush-logs') {
         const result = flushLogsNow({ onFlushed: handles.onFlushed });
         sendJson(res, 200, result);
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/v1/settings') {
+        const raw = await readBody(req);
+        let parsed: unknown;
+        try {
+          parsed = raw ? JSON.parse(raw) : null;
+        } catch {
+          sendJson(res, 400, { ok: false, error: 'invalid json' });
+          return;
+        }
+        handles.applySettings?.(parsed);
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/v1/window/toggle') {
+        handles.onToggleWindow?.();
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/v1/reload-settings') {
+        sendJson(res, 200, { ok: true, note: 'settings pushed by tray via POST /v1/settings' });
         return;
       }
 

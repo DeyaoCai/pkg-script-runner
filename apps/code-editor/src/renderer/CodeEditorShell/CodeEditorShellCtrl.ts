@@ -684,6 +684,8 @@ export class CodeEditorShellCtrl extends Controller<TData, TProps, TState> {
     if (this.data.designRoot) void this.controllers.docs.reload();
     else this.controllers.docs.clear();
 
+    void this.controllers.term.ensureShellAfterNav();
+
     if (nav.projectRoot) {
       await this.controllers.tree.reload();
       await this.refreshGit();

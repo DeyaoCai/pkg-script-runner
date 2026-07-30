@@ -184,11 +184,30 @@ export class BottomTermCtrl extends Controller<TData, TProps, TState> {
       const cols = Math.max(1, Math.min(MAX_COLS, p.columnsPerPage || 1));
       this.setState({ columnsPerPage: cols });
       this.syncPaging();
-      if (p.open) await this.show();
-      else this.setState({ open: false });
+      if (p.open) {
+        this.setState({ open: true });
+        await this.ensureShellAfterNav();
+      } else {
+        this.setState({ open: false });
+      }
     } catch {
       /* ignore */
     }
+  }
+
+  /** Retry shell creation once workspace/repo is known (bootstrap or applyNav). */
+  async ensureShellAfterNav(): Promise<void> {
+    if (!this.state.open || this.data.busy) return;
+    if (this.data.tabs.length) {
+      this.setData({ error: '' });
+      this.syncPaneLayout();
+      this.scheduleFit();
+      return;
+    }
+    const cwd = this.cwdForShell();
+    if (!cwd) return;
+    this.setData({ error: '' });
+    await this.addTab();
   }
 
   pagePrev(): void {

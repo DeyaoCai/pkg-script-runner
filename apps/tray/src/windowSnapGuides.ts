@@ -32,13 +32,6 @@ function intersects(a: DipRect, b: DipRect): boolean {
   );
 }
 
-function emptyGuides(display: DipRect): SnapGuides {
-  return {
-    xs: [0, display.width],
-    ys: [0, display.height],
-  };
-}
-
 type Rect = { left: number; top: number; right: number; bottom: number };
 
 type WinApis = {
@@ -190,14 +183,34 @@ function shouldSkipTitle(title: string): boolean {
  * 非 Windows 或枚举失败时仅返回屏幕四边。
  */
 export function getWindowSnapGuides(displayBounds: DipRect): SnapGuides {
-  const base = emptyGuides(displayBounds);
-  const api = loadWinApis();
-  if (!api) return base;
+  const wins = listCaptureWindows(displayBounds);
+  const xs: number[] = [0, displayBounds.width];
+  const ys: number[] = [0, displayBounds.height];
+  for (const w of wins) {
+    xs.push(w.x, w.x + w.w);
+    ys.push(w.y, w.y + w.h);
+  }
+  return {
+    xs: uniqSorted(xs.map((v) => Math.max(0, Math.min(displayBounds.width, v)))),
+    ys: uniqSorted(ys.map((v) => Math.max(0, Math.min(displayBounds.height, v)))),
+  };
+}
 
-  const xs: number[] = [...base.xs];
-  const ys: number[] = [...base.ys];
+export type CaptureWindow = {
+  title: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+/** 当前显示器上可点选截取的顶层窗口（相对 display 左上角 DIP） */
+export function listCaptureWindows(displayBounds: DipRect): CaptureWindow[] {
+  const api = loadWinApis();
+  if (!api) return [];
+
+  const out: CaptureWindow[] = [];
   const display = displayBounds;
-  let counted = 0;
 
   try {
     api.enumTopLevel((hwnd) => {
@@ -210,12 +223,13 @@ export function getWindowSnapGuides(displayBounds: DipRect): SnapGuides {
 
         const title = api.readTitle(hwnd);
         if (shouldSkipTitle(title)) return;
+        if (!title.trim()) return;
 
         const raw = api.getBounds(hwnd);
         if (!raw) return;
         const physW = raw.right - raw.left;
         const physH = raw.bottom - raw.top;
-        if (physW < 8 || physH < 8) return;
+        if (physW < 32 || physH < 32) return;
 
         const tl = screen.screenToDipPoint({ x: raw.left, y: raw.top });
         const br = screen.screenToDipPoint({ x: raw.right, y: raw.bottom });
@@ -225,40 +239,28 @@ export function getWindowSnapGuides(displayBounds: DipRect): SnapGuides {
           width: Math.max(0, br.x - tl.x),
           height: Math.max(0, br.y - tl.y),
         };
-        if (winDip.width < 4 || winDip.height < 4) return;
+        if (winDip.width < 24 || winDip.height < 24) return;
         if (!intersects(winDip, display)) return;
 
-        const left = winDip.x - display.x;
-        const top = winDip.y - display.y;
-        const right = left + winDip.width;
-        const bottom = top + winDip.height;
-
-        for (const v of [left, right]) {
-          if (v >= -2 && v <= display.width + 2) {
-            xs.push(Math.max(0, Math.min(display.width, v)));
-          }
-        }
-        for (const v of [top, bottom]) {
-          if (v >= -2 && v <= display.height + 2) {
-            ys.push(Math.max(0, Math.min(display.height, v)));
-          }
-        }
-        counted += 1;
+        const x = winDip.x - display.x;
+        const y = winDip.y - display.y;
+        out.push({
+          title: title.trim().slice(0, 80),
+          x: Math.max(0, x),
+          y: Math.max(0, y),
+          w: Math.min(display.width - Math.max(0, x), winDip.width),
+          h: Math.min(display.height - Math.max(0, y), winDip.height),
+        });
       } catch {
-        /* skip broken hwnd */
+        /* skip */
       }
     });
   } catch (err) {
-    console.warn('[pkg-runner] EnumWindows failed:', err);
-    return base;
+    console.warn('[pkg-runner] listCaptureWindows failed:', err);
+    return [];
   }
 
-  if (counted === 0) {
-    console.warn('[pkg-runner] window snap: no top-level windows matched');
-  }
-
-  return {
-    xs: uniqSorted(xs),
-    ys: uniqSorted(ys),
-  };
+  // 小窗口优先，便于点选被大窗盖住的边缘应用
+  out.sort((a, b) => a.w * a.h - b.w * b.h);
+  return out;
 }

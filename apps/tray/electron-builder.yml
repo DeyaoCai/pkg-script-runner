@@ -1,7 +1,7 @@
 appId: local.pkg-runner.tray
 productName: Pkg Runner
 copyright: Copyright © DS Agent
-artifactName: PkgRunner-Tray-${version}-${os}-${arch}.${ext}
+artifactName: PkgRunner-${version}-${os}-${arch}.${ext}
 directories:
   output: release
   buildResources: assets
@@ -19,27 +19,60 @@ files:
   - '!**/node_modules/koffi/**/*.{md,cc,hh,h,c,S,asm,cmake,txt}'
   - '!**/node_modules/**/{README,CHANGELOG,HISTORY,LICENSE,LICENCE,NOTICE}*'
   - '!**/node_modules/**/{test,tests,__tests__,docs,example,examples,benchmark}/**'
+  - '!**/node_modules/node-pty/prebuilds/darwin-*/**'
+  - '!**/node_modules/node-pty/prebuilds/win32-arm64/**'
+  - '!**/node_modules/node-pty/deps/**'
+  - '!**/node_modules/node-pty/src/**'
+  - '!**/node_modules/node-pty/third_party/**'
+  - '!**/node_modules/node-pty/scripts/**'
+  - '!**/node_modules/node-pty/build/**'
+  - '!**/node_modules/node-pty/binding.gyp'
+  - '!**/node_modules/node-pty/**/*.md'
 asar: true
 asarUnpack:
   - '**/*.node'
+  - '**/node-pty/prebuilds/**'
   - '**/koffi/**/*.node'
   - '**/@koromix/koffi-*/**'
 electronLanguages:
   - en-US
   - zh-CN
-compression: maximum
+compression: normal
 npmRebuild: false
 extraResources:
   - from: release-stage/apps
     to: apps
     filter:
       - '**/*'
+  - from: release-stage/runner
+    to: runner
+    filter:
+      - '**/*'
+  - from: release-stage/code-editor
+    to: code-editor
+    filter:
+      - '**/*'
 win:
   target:
-    - target: portable
+    - target: nsis
+      arch:
+        - x64
+    - target: dir
       arch:
         - x64
   icon: assets/icon.png
   executableName: PkgRunnerTray
-portable:
-  artifactName: PkgRunner-Tray-${version}-portable.exe
+nsis:
+  oneClick: false
+  # 当前用户安装，避免 UAC 提权后快捷方式写到管理员桌面
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Pkg Runner
+  uninstallDisplayName: Pkg Runner
+  artifactName: PkgRunner-Setup-${version}.exe
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  include: installer.nsh

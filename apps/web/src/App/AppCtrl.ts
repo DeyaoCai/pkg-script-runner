@@ -8,7 +8,6 @@ import { ProjectsPanelCtrl } from '../components/ProjectsPanel/ProjectsPanelCtrl
 import { ScriptsPanelCtrl } from '../components/ScriptsPanel/ScriptsPanelCtrl';
 import { LogPanelCtrl } from '../components/LogPanel/LogPanelCtrl';
 import { TitleBarCtrl } from '../components/TitleBar/TitleBarCtrl';
-import { ThemePanelCtrl } from '../components/ThemePanel/ThemePanelCtrl';
 
 export type LogSession = {
   id: string;
@@ -25,10 +24,7 @@ export type LogSession = {
 
 export const SYSTEM_ID = 'system';
 
-const THEME_KEY = 'pkg-runner-theme';
-const GLASS_ALPHA_KEY = 'pkg-runner:glass-alpha';
 const GLASS_BLUR_KEY = 'pkg-runner:glass-blur';
-const FONT_KEY = 'pkg-runner:font';
 
 export type AppData = {
   projects: ProjectsState['projects'];
@@ -97,6 +93,7 @@ function defaultSettings(): AppSettings {
 export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   readonly api: PkgRunnerApi | null;
   private cleanupBoot: (() => void) | undefined;
+  private metaFlashTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly shellPendingData = new Map<string, string>();
 
   declare controllers: {
@@ -104,7 +101,6 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     scripts: ScriptsPanelCtrl;
     log: LogPanelCtrl;
     titleBar: TitleBarCtrl;
-    theme: ThemePanelCtrl;
   };
 
   constructor() {
@@ -139,9 +135,84 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       scripts: new ScriptsPanelCtrl(this),
       log: new LogPanelCtrl(this),
       titleBar: new TitleBarCtrl(this),
-      theme: new ThemePanelCtrl(this),
     };
     this.ensureSystemSession();
+    if (this.api) {
+      this.cleanupBoot = this.bindIpc(this.api);
+    }
+  }
+
+  /** Register IPC before Vue mount so early main-process pushes are not missed. */
+  private bindIpc(api: PkgRunnerApi): () => void {
+    const unsubs = [
+      api.onLog((p) => {
+        this.handleLogPayload(p);
+      }),
+      api.onJobs((list) => {
+        void this.setData({ jobs: list });
+        for (const j of list) {
+          const s = this.data.logSessions[j.id];
+          if (s) s.running = true;
+        }
+        for (const [id, s] of Object.entries(this.data.logSessions)) {
+          if (s.kind === 'job' && !list.some((j) => j.id === id)) s.running = false;
+        }
+      }),
+      api.onExit((payload) => {
+        const s = this.data.logSessions[payload.id];
+        if (s) {
+          s.running = false;
+          s.code = payload.code;
+        }
+      }),
+      api.onShellData((payload) => {
+        const prev = this.shellPendingData.get(payload.id) || '';
+        this.shellPendingData.set(payload.id, prev + payload.data);
+        window.dispatchEvent(new CustomEvent('pkg:shell-data', { detail: payload }));
+      }),
+      api.onOpenDir((dir) => {
+        void this.addProjectFromDir(dir);
+      }),
+      api.onSettings((s) => {
+        this.applySettings(s);
+      }),
+      // 必须 void：Vite 会把单语句块压成 `r=>this.setData(...)`，Proxy 经 contextBridge 回传会 "could not be cloned" → 黑屏
+      api.onPersistLogs((enabled) => {
+        void this.setData({ persistLogs: enabled });
+      }),
+      api.onMaximized((v) => {
+        void this.setData({ maximized: v });
+      }),
+      api.onProjects((state) => {
+        void this.applyProjectsState(state);
+      }),
+    ];
+    void this.syncFromHost(api);
+    return () => unsubs.forEach((u) => u());
+  }
+
+  private async syncFromHost(api: PkgRunnerApi): Promise<void> {
+    try {
+      this.applySettings(await api.getSettings());
+    } catch {
+      /* tray not ready */
+    }
+    try {
+      this.setData({ persistLogs: await api.getPersistLogs() });
+    } catch {
+      /* ignore */
+    }
+    try {
+      this.setData({ maximized: await api.windowIsMaximized() });
+    } catch {
+      /* ignore */
+    }
+    try {
+      await this.applyProjectsState(await api.getProjects());
+      this.setData({ jobs: await api.getJobs() });
+    } catch {
+      /* ignore */
+    }
   }
 
   get filteredProjects() {
@@ -179,18 +250,9 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     return list;
   }
 
-  openSettings(): void {
-    void this.api?.openSharedSettings?.();
-  }
-
   mount(): void {
     this.applyLayoutVars();
-    const result = this.bootstrap();
-    if (typeof result === 'function') this.cleanupBoot = result;
-    else
-      void Promise.resolve(result).then((fn) => {
-        if (typeof fn === 'function') this.cleanupBoot = fn;
-      });
+    this.bootstrap();
   }
 
   unmount(): void {
@@ -288,6 +350,15 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     });
   }
 
+  flashMeta(message: string, isError: boolean): void {
+    if (this.metaFlashTimer) clearTimeout(this.metaFlashTimer);
+    this.setData({ meta: message, metaError: isError });
+    this.metaFlashTimer = setTimeout(() => {
+      this.metaFlashTimer = null;
+      this.updateMeta();
+    }, 2800);
+  }
+
   async applyProjectsState(state: ProjectsState): Promise<void> {
     this.setData({
       projects: state.projects,
@@ -328,110 +399,28 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   applyTheme(next: 'dark' | 'light'): void {
     this.setData({ theme: next });
     document.documentElement.setAttribute('data-theme', next);
-    try {
-      localStorage.setItem(THEME_KEY, next);
-    } catch {
-      /* ignore */
-    }
   }
 
   setFont(id: string): void {
     this.setData({ fontId: id });
     applyDocumentFonts(id);
-    try {
-      localStorage.setItem(FONT_KEY, id);
-    } catch {
-      /* ignore */
-    }
   }
 
   applySettings(s: AppSettings): void {
     Object.assign(this.data.settings, s);
+    this.setData({ persistLogs: s.persistLogs });
     this.applyTheme(s.theme === 'light' ? 'light' : 'dark');
     this.applyGlassVars(s.glassAlpha, this.data.glassBlur);
     this.setFont(s.fontId || 'jetbrains');
-    try {
-      localStorage.setItem(GLASS_ALPHA_KEY, String(this.data.glassAlpha));
-    } catch {
-      /* ignore */
-    }
     const cols = Math.min(4, Math.max(1, s.shellMosaicCols || 2));
     document.documentElement.style.setProperty('--shell-mosaic-cols', String(cols));
-  }
-
-  async persistSettings(patch: Partial<AppSettings>) {
-    if (!this.api) return;
-    const res = await this.api.setSettings(patch);
-    this.applySettings(res.settings);
-    return res;
   }
 
   bootstrap(): (() => void) | void {
     this.ensureSystemSession();
     if (!this.api) {
       this.setData({ meta: '请在 Electron 中打开', metaError: true });
-      return;
     }
-    const api = this.api;
-    const unsubs = [
-      api.onLog((p) => this.handleLogPayload(p)),
-      api.onJobs((list) => {
-        this.setData({ jobs: list });
-        for (const j of list) {
-          const s = this.data.logSessions[j.id];
-          if (s) s.running = true;
-        }
-        for (const [id, s] of Object.entries(this.data.logSessions)) {
-          if (s.kind === 'job' && !list.some((j) => j.id === id)) s.running = false;
-        }
-      }),
-      api.onExit((payload) => {
-        const s = this.data.logSessions[payload.id];
-        if (s) {
-          s.running = false;
-          s.code = payload.code;
-        }
-      }),
-      api.onShellData((payload) => {
-        const prev = this.shellPendingData.get(payload.id) || '';
-        this.shellPendingData.set(payload.id, prev + payload.data);
-        window.dispatchEvent(new CustomEvent('pkg:shell-data', { detail: payload }));
-      }),
-      api.onOpenDir((dir) => {
-        void this.addProjectFromDir(dir);
-      }),
-      api.onSettings((s) => this.applySettings(s)),
-      api.onPersistLogs((enabled) => this.setData({ persistLogs: enabled })),
-      api.onMaximized((v) => this.setData({ maximized: v })),
-      api.onProjects((state) => {
-        void this.applyProjectsState(state);
-      }),
-    ];
-    if (api.onOpenSettings) {
-      unsubs.push(api.onOpenSettings(() => this.openSettings()));
-    }
-
-    void (async () => {
-      try {
-        this.applySettings(await api.getSettings());
-      } catch {
-        /* ignore */
-      }
-      try {
-        this.setData({ persistLogs: await api.getPersistLogs() });
-      } catch {
-        /* ignore */
-      }
-      try {
-        this.setData({ maximized: await api.windowIsMaximized() });
-      } catch {
-        /* ignore */
-      }
-      await this.applyProjectsState(await api.getProjects());
-      this.setData({ jobs: await api.getJobs() });
-    })();
-
-    return () => unsubs.forEach((u) => u());
   }
 
   async selectProject(dir: string): Promise<void> {

@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
+import { diagLog } from './diagLog.js';
 
 export const DEFAULT_SCREENSHOT_HOTKEY = '';
 export const DEFAULT_ACTIVATE_HOTKEY = '';
+export const DEFAULT_EDITOR_HOTKEY = '';
 export const DEFAULT_SCREENSHOT_HISTORY_LIMIT = 10;
 export const MIN_SCREENSHOT_HISTORY_LIMIT = 1;
 export const MAX_SCREENSHOT_HISTORY_LIMIT = 100;
@@ -23,6 +25,7 @@ export type ShellLayout = 'grid' | 'single';
 export type SharedPrefs = {
   screenshotHotkey: string;
   activateHotkey: string;
+  editorHotkey: string;
   screenshotHistoryLimit: number;
   screenshotDrawColor: string;
   fontId: string;
@@ -40,6 +43,7 @@ export type SharedSettings = Omit<SharedPrefs, 'screenshotDrawColor' | 'migrated
 const DEFAULTS: SharedPrefs = {
   screenshotHotkey: DEFAULT_SCREENSHOT_HOTKEY,
   activateHotkey: DEFAULT_ACTIVATE_HOTKEY,
+  editorHotkey: DEFAULT_EDITOR_HOTKEY,
   screenshotHistoryLimit: DEFAULT_SCREENSHOT_HISTORY_LIMIT,
   screenshotDrawColor: DEFAULT_SCREENSHOT_DRAW_COLOR,
   fontId: DEFAULT_FONT_ID,
@@ -52,13 +56,17 @@ const DEFAULTS: SharedPrefs = {
   migratedFromRunner: false,
 };
 
-/** Stable path under %APPDATA%/pkg-runner so all processes share one file. */
+/** Stable path under %APPDATA%/pkg-runner — only tray reads/writes this file. */
 export function sharedSettingsPath(): string {
   return path.join(app.getPath('appData'), 'pkg-runner', 'shared-settings.json');
 }
 
 export function trayCmdPath(): string {
   return path.join(app.getPath('appData'), 'pkg-runner', 'tray-cmd.json');
+}
+
+export function trayCmdReplyPath(): string {
+  return path.join(app.getPath('appData'), 'pkg-runner', 'tray-cmd-reply.json');
 }
 
 function legacyRunnerPrefsPath(): string {
@@ -122,6 +130,7 @@ export function settingsFromPrefs(prefs: SharedPrefs): SharedSettings {
   return {
     screenshotHotkey: prefs.screenshotHotkey,
     activateHotkey: prefs.activateHotkey,
+    editorHotkey: prefs.editorHotkey,
     screenshotHistoryLimit: prefs.screenshotHistoryLimit,
     fontId: prefs.fontId,
     glassAlpha: prefs.glassAlpha,
@@ -139,6 +148,7 @@ function coerce(parsed: Record<string, unknown>, migrated: boolean): SharedPrefs
       'screenshotHotkey' in parsed ? normalizeHotkey(parsed.screenshotHotkey) : '',
     activateHotkey:
       'activateHotkey' in parsed ? normalizeHotkey(parsed.activateHotkey) : '',
+    editorHotkey: 'editorHotkey' in parsed ? normalizeHotkey(parsed.editorHotkey) : '',
     screenshotHistoryLimit:
       'screenshotHistoryLimit' in parsed
         ? normalizeScreenshotHistoryLimit(parsed.screenshotHistoryLimit)
@@ -184,13 +194,25 @@ function migrateFromLegacy(): SharedPrefs | null {
 }
 
 export function loadPrefs(): SharedPrefs {
-  const shared = readJson(sharedSettingsPath());
-  if (shared) return coerce(shared, Boolean(shared.migratedFromRunner));
+  const file = sharedSettingsPath();
+  const shared = readJson(file);
+  if (shared) {
+    const prefs = coerce(shared, Boolean(shared.migratedFromRunner));
+    diagLog('tray:prefs', 'load.ok', {
+      file,
+      screenshotHotkey: prefs.screenshotHotkey,
+      activateHotkey: prefs.activateHotkey,
+      editorHotkey: prefs.editorHotkey,
+    });
+    return prefs;
+  }
   const migrated = migrateFromLegacy();
   if (migrated) {
+    diagLog('tray:prefs', 'load.migrate', { file });
     savePrefs(migrated);
     return migrated;
   }
+  diagLog('tray:prefs', 'load.defaults', { file });
   return { ...DEFAULTS };
 }
 
@@ -202,6 +224,33 @@ export function savePrefs(prefs: SharedPrefs): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Tray-owned watcher: reload prefs when shared-settings.json changes. */
+export function watchSharedSettings(onChange: () => void): () => void {
+  const file = sharedSettingsPath();
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+  } catch {
+    /* ignore */
+  }
+  let timer: NodeJS.Timeout | null = null;
+  const fire = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(onChange, 80);
+  };
+  let watcher: fs.FSWatcher | null = null;
+  try {
+    watcher = fs.watch(path.dirname(file), (event, name) => {
+      if (!name || name === 'shared-settings.json') fire();
+    });
+  } catch {
+    /* ignore */
+  }
+  return () => {
+    if (timer) clearTimeout(timer);
+    watcher?.close();
+  };
 }
 
 export function formatHotkeyLabel(accel: string): string {

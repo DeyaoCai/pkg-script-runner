@@ -7,17 +7,6 @@
     <script>
       (function () {
         try {
-          var t = localStorage.getItem('pkg-runner-theme');
-          if (t === 'light' || t === 'dark') {
-            document.documentElement.setAttribute('data-theme', t);
-          }
-          var a = Number(localStorage.getItem('pkg-runner:glass-alpha'));
-          if (isFinite(a)) {
-            document.documentElement.style.setProperty(
-              '--glass-alpha',
-              String(Math.min(100, Math.max(10, Math.round(a))) / 100),
-            );
-          }
           var b = Number(localStorage.getItem('pkg-runner:glass-blur'));
           if (isFinite(b)) {
             document.documentElement.style.setProperty(
@@ -71,7 +60,7 @@
           type="button"
           id="settingsBtn"
           class="btn titlebar-tool"
-          title="设置：字体 · 热键 · Shell"
+          title="打开托盘设置（热键 · 外观 · Shell）"
         >
           设置
         </button>

@@ -45,6 +45,6 @@ pnpm dist:win
 
 | 进程 | 职责 |
 |------|------|
-| Tray | 托盘、截屏热键/历史/设置、启动 Runner 与 Editor |
-| Runner | 脚本执行、控制面 HTTP、glass 实验窗 |
+| Tray | **读取/写入** shared-settings、截屏热键/历史、设置窗、启动子程序 |
+| Runner | 脚本执行、控制面 HTTP；**接收**托盘推送的配置（不读盘） |
 | Editor | 代码 / Markdown 工作台 |

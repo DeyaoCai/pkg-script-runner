@@ -18,9 +18,41 @@ export type LogPayload =
 
 export type JobInfo = { id: string; dir: string; scriptName: string };
 
+type SettingsPayload = {
+  fontId: string;
+  glassAlpha: number;
+  theme: 'dark' | 'light';
+  shellMosaicCols: number;
+  shellLayout: 'grid' | 'single';
+  alwaysOnTop: boolean;
+  activateHotkey: string;
+  screenshotHotkey: string;
+  screenshotHistoryLimit: number;
+  persistLogs: boolean;
+};
+
+function onChannel<T>(channel: string, cb: (payload: T) => void): () => void {
+  const handler = (_event: unknown, payload: T) => {
+    try {
+      // 渲染回调若 return Vue Proxy，contextBridge 会尝试克隆返回值 → "could not be cloned"
+      // 用独立包装函数确保 preload 侧永不把回调返回值向外抛
+      const run = cb as (p: T) => unknown;
+      void run(payload);
+    } catch (err) {
+      console.error(`[pkgRunner] ${channel} handler`, err);
+    }
+  };
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.removeListener(channel, handler);
+  };
+}
+
 const api = {
-  getInitialDir: (): Promise<string | null> => ipcRenderer.invoke('pkg:get-initial-dir'),
-  getProjects: (): Promise<ProjectsState> => ipcRenderer.invoke('pkg:get-projects'),
+  getInitialDir: (): Promise<string | null> =>
+    ipcRenderer.invoke('pkg:get-initial-dir'),
+  getProjects: (): Promise<ProjectsState> =>
+    ipcRenderer.invoke('pkg:get-projects'),
   addProject: (dir: string): Promise<{ dir: string; name: string }> =>
     ipcRenderer.invoke('pkg:add-project', dir),
   setActiveProject: (dir: string | null): Promise<ProjectsState> =>
@@ -42,163 +74,81 @@ const api = {
     ipcRenderer.invoke('pkg:shell-write', id, data),
   shellResize: (id: string, cols: number, rows: number): Promise<boolean> =>
     ipcRenderer.invoke('pkg:shell-resize', id, cols, rows),
-  shellClose: (id: string): Promise<boolean> => ipcRenderer.invoke('pkg:shell-close', id),
+  shellClose: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke('pkg:shell-close', id),
   shellCwd: (
     id: string,
   ): Promise<{ cwd: string; title: string; dir: string } | null> =>
     ipcRenderer.invoke('pkg:shell-cwd', id),
   getJobs: (): Promise<JobInfo[]> => ipcRenderer.invoke('pkg:get-jobs'),
-  getSettings: (): Promise<{
-    fontId: string;
-    glassAlpha: number;
-    theme: 'dark' | 'light';
-    shellMosaicCols: number;
-    shellLayout: 'grid' | 'single';
-    alwaysOnTop: boolean;
-    activateHotkey: string;
-    screenshotHotkey: string;
-    screenshotHistoryLimit: number;
-    persistLogs: boolean;
-  }> => ipcRenderer.invoke('pkg:get-settings'),
-  setSettings: (
-    patch: Partial<{
-      fontId: string;
-      glassAlpha: number;
-      theme: 'dark' | 'light';
-      shellMosaicCols: number;
-      shellLayout: 'grid' | 'single';
-      alwaysOnTop: boolean;
-      activateHotkey: string;
-      screenshotHotkey: string;
-      screenshotHistoryLimit: number;
-      persistLogs: boolean;
-    }>,
-  ): Promise<{
-    settings: {
-      fontId: string;
-      glassAlpha: number;
-      theme: 'dark' | 'light';
-      shellMosaicCols: number;
-      shellLayout: 'grid' | 'single';
-      alwaysOnTop: boolean;
-      activateHotkey: string;
-      screenshotHotkey: string;
-      screenshotHistoryLimit: number;
-      persistLogs: boolean;
-    };
-    hotkeyError: string | null;
-  }> => ipcRenderer.invoke('pkg:set-settings', patch),
-  suspendHotkeys: (): Promise<void> => ipcRenderer.invoke('pkg:hotkeys-suspend'),
+  getSettings: (): Promise<SettingsPayload> =>
+    ipcRenderer.invoke('pkg:get-settings'),
+  openTraySettings: (): Promise<void> =>
+    ipcRenderer.invoke('pkg:open-tray-settings'),
+  requestTraySettingsPatch: (patch: Record<string, unknown>): Promise<void> =>
+    ipcRenderer.invoke('pkg:request-tray-settings-patch', patch),
+  suspendHotkeys: (): Promise<void> =>
+    ipcRenderer.invoke('pkg:hotkeys-suspend'),
   resumeHotkeys: (): Promise<void> => ipcRenderer.invoke('pkg:hotkeys-resume'),
-  getPersistLogs: (): Promise<boolean> => ipcRenderer.invoke('pkg:get-persist-logs'),
-  setPersistLogs: (enabled: boolean): Promise<boolean> =>
-    ipcRenderer.invoke('pkg:set-persist-logs', enabled),
+  getPersistLogs: (): Promise<boolean> =>
+    ipcRenderer.invoke('pkg:get-persist-logs'),
   openLogsDir: (): Promise<{ ok: boolean; dir: string; error: string | null }> =>
     ipcRenderer.invoke('pkg:open-logs-dir'),
-  openSharedSettings: (): Promise<void> => ipcRenderer.invoke('pkg:open-shared-settings'),
   clearDiskLogs: (): Promise<{ ok: boolean; removed: number; dir: string }> =>
     ipcRenderer.invoke('pkg:clear-disk-logs'),
-  openGlassLabs: (): Promise<void> => ipcRenderer.invoke('pkg:open-glass-labs'),
-  openGlassLab: (kind: string): Promise<void> => ipcRenderer.invoke('pkg:open-glass-lab', kind),
-  windowMinimize: (): Promise<void> => ipcRenderer.invoke('pkg:window-minimize'),
-  windowMaximize: (): Promise<boolean> => ipcRenderer.invoke('pkg:window-maximize'),
+  openGlassLabs: (): Promise<void> =>
+    ipcRenderer.invoke('pkg:open-glass-labs'),
+  openGlassLab: (kind: string): Promise<void> =>
+    ipcRenderer.invoke('pkg:open-glass-lab', kind),
+  windowMinimize: (): Promise<void> =>
+    ipcRenderer.invoke('pkg:window-minimize'),
+  windowMaximize: (): Promise<boolean> =>
+    ipcRenderer.invoke('pkg:window-maximize'),
   windowClose: (): Promise<void> => ipcRenderer.invoke('pkg:window-close'),
   windowIsMaximized: (): Promise<boolean> =>
     ipcRenderer.invoke('pkg:window-is-maximized'),
   windowDragStart: (payload: { screenX: number; screenY: number }): void => {
-    ipcRenderer.send('pkg:window-drag-start', payload);
+    ipcRenderer.send('pkg:window-drag-start', {
+      screenX: payload.screenX,
+      screenY: payload.screenY,
+    });
   },
   windowDragMove: (payload: { screenX: number; screenY: number }): void => {
-    ipcRenderer.send('pkg:window-drag-move', payload);
+    ipcRenderer.send('pkg:window-drag-move', {
+      screenX: payload.screenX,
+      screenY: payload.screenY,
+    });
   },
   windowDragEnd: (): void => {
     ipcRenderer.send('pkg:window-drag-end');
   },
-  onMaximized: (cb: (maximized: boolean) => void) => {
-    const handler = (_: unknown, maximized: boolean) => cb(maximized);
-    ipcRenderer.on('pkg:maximized', handler);
-    return () => ipcRenderer.removeListener('pkg:maximized', handler);
-  },
-  onLog: (cb: (payload: LogPayload) => void) => {
-    const handler = (_: unknown, payload: LogPayload) => cb(payload);
-    ipcRenderer.on('pkg:log', handler);
-    return () => ipcRenderer.removeListener('pkg:log', handler);
-  },
-  onRunning: (cb: (running: boolean) => void) => {
-    const handler = (_: unknown, running: boolean) => cb(running);
-    ipcRenderer.on('pkg:running', handler);
-    return () => ipcRenderer.removeListener('pkg:running', handler);
-  },
-  onJobs: (cb: (jobs: JobInfo[]) => void) => {
-    const handler = (_: unknown, jobs: JobInfo[]) => cb(jobs);
-    ipcRenderer.on('pkg:jobs', handler);
-    return () => ipcRenderer.removeListener('pkg:jobs', handler);
-  },
-  onExit: (cb: (payload: { id: string; scriptName: string; code: number | null }) => void) => {
-    const handler = (
-      _: unknown,
-      payload: { id: string; scriptName: string; code: number | null },
-    ) => cb(payload);
-    ipcRenderer.on('pkg:exit', handler);
-    return () => ipcRenderer.removeListener('pkg:exit', handler);
-  },
-  onShellData: (cb: (payload: { id: string; data: string }) => void) => {
-    const handler = (_: unknown, payload: { id: string; data: string }) => cb(payload);
-    ipcRenderer.on('pkg:shell-data', handler);
-    return () => ipcRenderer.removeListener('pkg:shell-data', handler);
-  },
-  onOpenDir: (cb: (dir: string) => void) => {
-    const handler = (_: unknown, dir: string) => cb(dir);
-    ipcRenderer.on('pkg:open-dir', handler);
-    return () => ipcRenderer.removeListener('pkg:open-dir', handler);
-  },
-  onSettings: (
-    cb: (settings: {
-      fontId: string;
-      glassAlpha: number;
-      theme: 'dark' | 'light';
-      shellMosaicCols: number;
-      shellLayout: 'grid' | 'single';
-      alwaysOnTop: boolean;
-      activateHotkey: string;
-    }) => void,
-  ) => {
-    const handler = (
-      _: unknown,
-      settings: {
-        fontId: string;
-        glassAlpha: number;
-        theme: 'dark' | 'light';
-        shellMosaicCols: number;
-        shellLayout: 'grid' | 'single';
-        alwaysOnTop: boolean;
-        activateHotkey: string;
-      },
-    ) => cb(settings);
-    ipcRenderer.on('pkg:settings', handler);
-    return () => ipcRenderer.removeListener('pkg:settings', handler);
-  },
-  onOpenSettings: (cb: () => void) => {
-    const handler = () => cb();
-    ipcRenderer.on('pkg:open-settings', handler);
-    return () => ipcRenderer.removeListener('pkg:open-settings', handler);
-  },
-  onPersistLogs: (cb: (enabled: boolean) => void) => {
-    const handler = (_: unknown, enabled: boolean) => cb(enabled);
-    ipcRenderer.on('pkg:persist-logs', handler);
-    return () => ipcRenderer.removeListener('pkg:persist-logs', handler);
-  },
-  onProjects: (cb: (state: ProjectsState) => void) => {
-    const handler = (_: unknown, state: ProjectsState) => cb(state);
-    ipcRenderer.on('pkg:projects', handler);
-    return () => ipcRenderer.removeListener('pkg:projects', handler);
-  },
+  onMaximized: (cb: (maximized: boolean) => void) =>
+    onChannel<boolean>('pkg:maximized', cb),
+  onLog: (cb: (payload: LogPayload) => void) =>
+    onChannel<LogPayload>('pkg:log', cb),
+  onRunning: (cb: (running: boolean) => void) =>
+    onChannel<boolean>('pkg:running', cb),
+  onJobs: (cb: (jobs: JobInfo[]) => void) => onChannel<JobInfo[]>('pkg:jobs', cb),
+  onExit: (
+    cb: (payload: { id: string; scriptName: string; code: number | null }) => void,
+  ) =>
+    onChannel<{ id: string; scriptName: string; code: number | null }>(
+      'pkg:exit',
+      cb,
+    ),
+  onShellData: (cb: (payload: { id: string; data: string }) => void) =>
+    onChannel<{ id: string; data: string }>('pkg:shell-data', cb),
+  onOpenDir: (cb: (dir: string) => void) => onChannel<string>('pkg:open-dir', cb),
+  onSettings: (cb: (settings: SettingsPayload) => void) =>
+    onChannel<SettingsPayload>('pkg:settings', cb),
+  onPersistLogs: (cb: (enabled: boolean) => void) =>
+    onChannel<boolean>('pkg:persist-logs', cb),
+  onProjects: (cb: (state: ProjectsState) => void) =>
+    onChannel<ProjectsState>('pkg:projects', cb),
 };
 
-contextBridge.exposeInMainWorld('pkgRunner', api);
-
-declare global {
-  interface Window {
-    pkgRunner: typeof api;
-  }
+try {
+  contextBridge.exposeInMainWorld('pkgRunner', api);
+} catch (err) {
+  console.error('[pkgRunner] exposeInMainWorld failed', err);
 }

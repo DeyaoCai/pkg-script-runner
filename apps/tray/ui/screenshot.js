@@ -67,6 +67,15 @@ const MIN_REGION = 4;
 const SNAP_PX = 10;
 /** 吸附工具开关（默认关；工具栏按钮 / S 切换） */
 let snapEnabled = false;
+/** @type {{ title: string, x: number, y: number, w: number, h: number }[]} */
+let windowTargets = [];
+/** 点选窗口模式（有窗口列表时默认开；W 切换） */
+let windowPick = true;
+/** @type {{ title: string, x: number, y: number, w: number, h: number } | null} */
+let hoverWindow = null;
+/** 按下时记录，用于区分「点窗口」和「拖框选」 */
+let pressMeta = null;
+
 /** @type {number[]} */
 let snapXs = [0];
 /** @type {number[]} */
@@ -232,7 +241,12 @@ function setTool(next) {
 function updateHint() {
   const snapHint = snapEnabled ? '吸附开' : 'S 吸附';
   if (phase === 'select') {
-    hint.textContent = `拖选截取区域 · ${snapHint} · Esc 取消`;
+    if (windowPick && windowTargets.length) {
+      const name = hoverWindow?.title ? `「${hoverWindow.title}」` : '窗口';
+      hint.textContent = `点击截取${name} · 拖拽框选 · W 关窗口模式 · ${snapHint} · Esc 取消`;
+    } else {
+      hint.textContent = `拖选区域 · W 开窗口点选 · ${snapHint} · Esc 取消`;
+    }
     return;
   }
   if (tool === 'move') {
@@ -722,8 +736,11 @@ function resetToSelect() {
   moveOrigin = null;
   resizingRegion = false;
   resizeOrigin = null;
+  pressMeta = null;
   hidePickTip();
   document.body.classList.remove('is-move', 'is-moving', 'is-pick', 'is-resizing');
+  selectBox.classList.remove('is-window-hover');
+  showWindowHover(windowPick ? hoverWindow : null);
   redrawAll();
   updateHint();
 }
@@ -831,15 +848,16 @@ let finishing = false;
 let dismissing = false;
 
 async function requestCancel() {
-  if (finishing || dismissing) return;
+  if (finishing) return;
   dismissing = true;
   document.body.classList.add('is-dismissing');
   try {
     await api.cancel();
   } catch (err) {
+    hint.textContent = err instanceof Error ? err.message : String(err);
+  } finally {
     document.body.classList.remove('is-dismissing');
     dismissing = false;
-    hint.textContent = err instanceof Error ? err.message : String(err);
   }
 }
 
@@ -950,10 +968,23 @@ function onPointerDown(e) {
 
   if (phase === 'select') {
     selecting = true;
+    pressMeta = {
+      x,
+      y,
+      win: windowPick ? findWindowAt(x, y) : null,
+      dragged: false,
+    };
     const p = snapDraftSelectPoint(x, y);
     selStart = { x: p.x, y: p.y };
-    draftSelect = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
-    syncDraftSelect();
+    // 窗口模式下先不画框，等拖过阈值再变框选
+    if (windowPick && pressMeta.win) {
+      draftSelect = null;
+      showWindowHover(pressMeta.win);
+    } else {
+      draftSelect = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+      selectBox.classList.remove('is-window-hover');
+      syncDraftSelect();
+    }
     return;
   }
 
@@ -1004,6 +1035,44 @@ function onPointerDown(e) {
 /** 框选拖拽临时态 */
 let draftSelect = null;
 
+function findWindowAt(x, y) {
+  // 已按面积从小到大排过，第一个命中即最贴合的窗口
+  for (const w of windowTargets) {
+    if (x >= w.x && y >= w.y && x <= w.x + w.w && y <= w.y + w.h) return w;
+  }
+  return null;
+}
+
+function showWindowHover(win) {
+  hoverWindow = win;
+  if (phase !== 'select' || selecting || draftSelect) return;
+  if (!win) {
+    selectBox.hidden = true;
+    selectBox.classList.remove('is-window-hover');
+    selectMask.hidden = false;
+    selectMask.style.clipPath = 'none';
+    selectMask.style.boxShadow = 'inset 0 0 0 9999px rgba(0, 0, 0, 0.45)';
+    updateHint();
+    return;
+  }
+  selectBox.hidden = false;
+  selectBox.classList.add('is-window-hover');
+  selectBox.classList.remove('is-adjustable');
+  selectBox.style.left = `${win.x}px`;
+  selectBox.style.top = `${win.y}px`;
+  selectBox.style.width = `${win.w}px`;
+  selectBox.style.height = `${win.h}px`;
+  selectMask.hidden = false;
+  selectMask.style.clipPath = `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${win.x}px ${win.y}px, ${win.x}px ${win.y + win.h}px, ${win.x + win.w}px ${win.y + win.h}px, ${win.x + win.w}px ${win.y}px, ${win.x}px ${win.y}px)`;
+  updateHint();
+}
+
+function setWindowTargets(list) {
+  windowTargets = Array.isArray(list) ? list : [];
+  windowPick = windowTargets.length > 0;
+  if (phase === 'select') updateHint();
+}
+
 function syncDraftSelect() {
   if (!draftSelect) {
     if (phase === 'select') {
@@ -1034,6 +1103,29 @@ function onPointerMove(e) {
   if (phase === 'ready' && tool === 'pick') {
     const hex = sampleColorAtCss(x, y);
     showPickTip(x, y, hex);
+    return;
+  }
+
+  if (phase === 'select' && !selecting) {
+    if (windowPick && windowTargets.length) {
+      showWindowHover(findWindowAt(x, y));
+    }
+    return;
+  }
+
+  if (phase === 'select' && selecting && pressMeta && !pressMeta.dragged) {
+    const dx = Math.abs(x - pressMeta.x);
+    const dy = Math.abs(y - pressMeta.y);
+    if (dx >= 4 || dy >= 4) {
+      pressMeta.dragged = true;
+      selectBox.classList.remove('is-window-hover');
+      const p0 = snapDraftSelectPoint(pressMeta.x, pressMeta.y);
+      const p1 = snapDraftSelectPoint(x, y);
+      draftSelect = { x1: p0.x, y1: p0.y, x2: p1.x, y2: p1.y };
+      syncDraftSelect();
+    } else if (pressMeta.win) {
+      showWindowHover(pressMeta.win);
+    }
     return;
   }
 
@@ -1079,6 +1171,20 @@ function onPointerMove(e) {
 function onPointerUp(e) {
   if (phase === 'select' && selecting) {
     selecting = false;
+    const meta = pressMeta;
+    pressMeta = null;
+    // 单击窗口 → 直接截该应用
+    if (meta && !meta.dragged && meta.win && windowPick) {
+      draftSelect = null;
+      selectBox.classList.remove('is-window-hover');
+      enterReady({
+        x: meta.win.x,
+        y: meta.win.y,
+        w: Math.max(MIN_REGION, meta.win.w),
+        h: Math.max(MIN_REGION, meta.win.h),
+      });
+      return;
+    }
     if (draftSelect) {
       let x1 = snapTo(draftSelect.x1, snapTargetsX());
       let y1 = snapTo(draftSelect.y1, snapTargetsY());
@@ -1174,6 +1280,20 @@ window.addEventListener('keydown', (e) => {
     setSnapEnabled(!snapEnabled);
     return;
   }
+  if (
+    phase === 'select' &&
+    !typing &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.altKey &&
+    e.key.toLowerCase() === 'w'
+  ) {
+    e.preventDefault();
+    windowPick = !windowPick;
+    if (!windowPick) showWindowHover(null);
+    updateHint();
+    return;
+  }
   if (phase === 'ready' && e.key === 'Enter' && !e.isComposing) {
     if (typing) return;
     e.preventDefault();
@@ -1260,11 +1380,14 @@ function resetCaptureUi() {
   resizingRegion = false;
   resizeOrigin = null;
   draftSelect = null;
+  pressMeta = null;
+  hoverWindow = null;
   finishing = false;
   dismissing = false;
   document.body.classList.remove('is-dismissing', 'is-entering');
   setSnapEnabled(false, { hint: false });
   lastSnapGuides = null;
+  selectBox?.classList.remove('is-window-hover');
   snapXs = [0];
   snapYs = [0];
   sampleCanvas = null;
@@ -1310,8 +1433,7 @@ function applyCapturePayload(payload) {
     return;
   }
   resetCaptureUi();
-  document.body.classList.add('is-entering');
-  document.body.classList.remove('is-dismissing');
+  document.body.classList.remove('is-entering', 'is-dismissing');
   fullW = payload.width;
   fullH = payload.height;
   // 先记下 guides；等 layoutCanvases 有 viewW/H 后再建吸附线
@@ -1321,7 +1443,7 @@ function applyCapturePayload(payload) {
   }
   hint.textContent = '加载截屏…';
   fullImg = new Image();
-  fullImg.decoding = 'async';
+  fullImg.decoding = 'sync';
   fullImg.onload = () => {
     sampleCanvas = null;
     sampleCtx = null;
@@ -1330,10 +1452,7 @@ function applyCapturePayload(payload) {
     selectMask.hidden = false;
     selectMask.style.clipPath = 'none';
     updateHint();
-    // 等一帧再通知，确保 canvas 已提交
-    requestAnimationFrame(() => {
-      if (typeof api.contentReady === 'function') api.contentReady();
-    });
+    if (typeof api.contentReady === 'function') api.contentReady();
   };
   fullImg.onerror = () => {
     hint.textContent = '截屏图片加载失败';
@@ -1355,14 +1474,17 @@ if (typeof api.onSessionStart === 'function') {
 }
 if (typeof api.onAppearing === 'function') {
   api.onAppearing(() => {
-    document.body.classList.remove('is-dismissing');
-    // 先保证处于透明，再下一帧去掉 is-entering 触发 CSS 渐显
-    document.body.classList.add('is-entering');
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        document.body.classList.remove('is-entering');
-      });
-    });
+    document.body.classList.remove('is-dismissing', 'is-entering');
+  });
+}
+if (typeof api.onSnapGuides === 'function') {
+  api.onSnapGuides((guides) => {
+    setSnapGuides(guides);
+  });
+}
+if (typeof api.onWindowTargets === 'function') {
+  api.onWindowTargets((windows) => {
+    setWindowTargets(windows);
   });
 }
 if (typeof api.onDismissing === 'function') {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pkg Runner tray host — screenshot · launch runner/editor",
+  "description": "Pkg Runner — tray + runner + screenshot (single process)",
   "author": "DS Agent",
   "main": "dist/main.js",
   "files": [
@@ -12,7 +12,8 @@
     "assets"
   ],
   "dependencies": {
-    "koffi": "^3.1.2"
+    "koffi": "^3.1.2",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -31,6 +32,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rimraf dist release",
     "dist:win": "node ./scripts/dist-bundle.mjs",
-    "dist:win:dir": "electron-builder --win dir --x64"
+    "dist:win:dir": "electron-builder --win dir --x64",
+    "dist:win:nsis": "electron-builder --win nsis --x64"
   }
 }

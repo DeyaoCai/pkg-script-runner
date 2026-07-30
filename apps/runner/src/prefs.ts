@@ -1,16 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
-import {
-  loadSharedSettings,
-  type SharedSettings,
-  type UiTheme,
-  type ShellLayout,
-} from './sharedSettings.js';
+import type { SharedSettings } from './sharedSettings.js';
 
-export type { UiTheme, ShellLayout };
+export type { UiTheme, ShellLayout } from './sharedSettings.js';
 
-/** Runner-local only (projects). UI settings live in shared-settings.json. */
+/** Runner-local only (projects). UI settings come from tray push. */
 export type Prefs = {
   projects: string[];
   activeProject: string | null;
@@ -40,10 +35,6 @@ function normalizeDirList(raw: unknown): string[] {
     out.push(dir);
   }
   return out;
-}
-
-export function settingsFromPrefs(_prefs: Prefs): AppSettings {
-  return loadSharedSettings();
 }
 
 export function loadPrefs(): Prefs {

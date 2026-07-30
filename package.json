@@ -8,9 +8,11 @@
     "dev": "pnpm --filter @pkg-runner/tray dev",
     "dev:tray": "pnpm --filter @pkg-runner/tray dev",
     "dev:runner": "pnpm --filter @pkg-runner/runner dev",
+    "diag:tail": "node ./scripts/diag-tail.mjs",
+    "diag:tail:80": "node ./scripts/diag-tail.mjs 80",
     "dev:web": "pnpm --filter @pkg-runner/web dev",
     "dev:code-editor": "pnpm --filter @pkg-runner/code-editor dev",
-    "dev:all": "pnpm --filter @pkg-runner/tray dev & pnpm --filter @pkg-runner/runner dev & pnpm --filter @pkg-runner/code-editor dev",
+    "dev:all": "pnpm --filter @pkg-runner/tray dev",
     "build": "pnpm --filter @pkg-runner/controller build && pnpm --filter @pkg-runner/shell build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/web build",
     "build:web": "pnpm --filter @pkg-runner/web build",
     "build:tray": "pnpm --filter @pkg-runner/tray build",
@@ -24,8 +26,8 @@
     "check": "pnpm typecheck && pnpm check:vue-controller",
     "clean": "pnpm -r run clean && rimraf node_modules",
     "rebuild:native": "pnpm --filter @pkg-runner/runner rebuild:native",
-    "dist:win": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/runner dist:win && pnpm --filter @pkg-runner/code-editor dist:win && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win",
-    "dist:win:dir": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/runner dist:win:dir && pnpm --filter @pkg-runner/tray dist:win:dir"
+    "dist:win": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win",
+    "dist:win:dir": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win:dir"
   },
   "devDependencies": {
     "rimraf": "^6.0.0",

@@ -7,11 +7,10 @@
           type="button"
           class="btn toggle-btn"
           :class="{ active: app.data.persistLogs }"
-          :aria-pressed="app.data.persistLogs"
-          title="日志落盘"
-          @click="ctrl.togglePersist()"
+          title="切换脚本日志落盘（写入托盘配置）"
+          @click="ctrl.togglePersistLogs()"
         >
-          落盘
+          落盘{{ app.data.persistLogs ? '开' : '关' }}
         </button>
         <button type="button" class="btn" title="打开落盘日志目录" @click="ctrl.openLogsDir()">
           目录
@@ -82,20 +81,17 @@
       >
         +
       </button>
-      <button
-        type="button"
+      <span
         class="log-tab-layout"
         :data-layout="app.data.settings.shellLayout === 'grid' ? 'grid' : 'single'"
-        :aria-pressed="app.data.settings.shellLayout === 'grid'"
         :title="
           app.data.settings.shellLayout === 'grid'
-            ? '当前：网格 · 点击改为单个'
-            : '当前：单个 · 点击改为网格'
+            ? 'Shell 布局：网格（在托盘设置中修改）'
+            : 'Shell 布局：单个（在托盘设置中修改）'
         "
-        @click="ctrl.toggleLayout()"
       >
         {{ app.data.settings.shellLayout === 'grid' ? '网格' : '单个' }}
-      </button>
+      </span>
     </div>
 
     <div v-if="!ctrl.paneMode" class="log-views">

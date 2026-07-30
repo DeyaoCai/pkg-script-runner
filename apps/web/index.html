@@ -7,17 +7,6 @@
     <script>
       (function () {
         try {
-          var t = localStorage.getItem('pkg-runner-theme');
-          if (t === 'light' || t === 'dark') {
-            document.documentElement.setAttribute('data-theme', t);
-          }
-          var a = Number(localStorage.getItem('pkg-runner:glass-alpha'));
-          if (isFinite(a)) {
-            document.documentElement.style.setProperty(
-              '--glass-alpha',
-              String(Math.min(100, Math.max(10, Math.round(a))) / 100),
-            );
-          }
           var b = Number(localStorage.getItem('pkg-runner:glass-blur'));
           if (isFinite(b)) {
             document.documentElement.style.setProperty(

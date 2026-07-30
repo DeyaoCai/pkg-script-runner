@@ -1,9 +1,10 @@
 /**
- * Build tray portable and stage sibling Runner / Editor portable exes.
+ * Build Windows installer (NSIS) + win-unpacked for debugging.
  *
  * Expects prior:
- *   pnpm --filter @pkg-runner/runner dist:win
- *   pnpm --filter @pkg-runner/code-editor dist:win
+ *   pnpm --filter @pkg-runner/runner build
+ *   pnpm --filter @pkg-runner/code-editor build
+ *   pnpm --filter @pkg-runner/tray build
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,45 +13,88 @@ import { fileURLToPath } from 'node:url';
 
 const trayRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.join(trayRoot, '..', '..');
+const runnerRoot = path.join(repoRoot, 'apps', 'runner');
+const editorRoot = path.join(repoRoot, 'apps', 'code-editor');
 
-function findPortableExe(appDir, prefix) {
-  const releaseDir = path.join(appDir, 'release');
-  if (!fs.existsSync(releaseDir)) return null;
-  for (const name of fs.readdirSync(releaseDir)) {
-    if (!name.toLowerCase().endsWith('.exe')) continue;
-    if (name.startsWith(prefix) && name.includes('portable')) {
-      return path.join(releaseDir, name);
-    }
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
+    const from = path.join(src, ent.name);
+    const to = path.join(dest, ent.name);
+    if (ent.isDirectory()) copyDir(from, to);
+    else fs.copyFileSync(from, to);
   }
-  return null;
 }
 
-const runnerPortable = findPortableExe(path.join(repoRoot, 'apps', 'runner'), 'PkgRunner');
-const editorPortable = findPortableExe(
-  path.join(repoRoot, 'apps', 'code-editor'),
-  'CodeEditor',
+const stageRoot = path.join(trayRoot, 'release-stage');
+fs.rmSync(stageRoot, { recursive: true, force: true });
+
+fs.mkdirSync(path.join(stageRoot, 'apps'), { recursive: true });
+
+const runnerStage = path.join(stageRoot, 'runner');
+const distUi = path.join(runnerRoot, 'dist-ui');
+if (fs.existsSync(distUi)) {
+  copyDir(distUi, path.join(runnerStage, 'dist-ui'));
+  console.log('[tray-dist] staged runner dist-ui');
+} else {
+  console.warn('[tray-dist] runner dist-ui not found — run pnpm --filter @pkg-runner/runner build');
+}
+const runnerUi = path.join(runnerRoot, 'ui');
+if (fs.existsSync(runnerUi)) {
+  copyDir(runnerUi, path.join(runnerStage, 'ui'));
+  console.log('[tray-dist] staged runner ui');
+}
+
+const trayRunnerPreload = path.join(trayRoot, 'dist', 'runner', 'preload.cjs');
+if (fs.existsSync(trayRunnerPreload)) {
+  const distStage = path.join(runnerStage, 'dist');
+  fs.mkdirSync(distStage, { recursive: true });
+  fs.copyFileSync(trayRunnerPreload, path.join(distStage, 'preload.cjs'));
+  console.log('[tray-dist] staged runner preload');
+}
+
+const editorStage = path.join(stageRoot, 'code-editor');
+const editorRenderer = path.join(editorRoot, 'dist', 'renderer');
+if (fs.existsSync(editorRenderer)) {
+  copyDir(editorRenderer, path.join(editorStage, 'dist', 'renderer'));
+  console.log('[tray-dist] staged editor renderer');
+} else {
+  console.warn(
+    '[tray-dist] editor renderer not found — run pnpm --filter @pkg-runner/code-editor build',
+  );
+}
+const trayEditorPreload = path.join(trayRoot, 'dist', 'editor', 'preload.cjs');
+if (fs.existsSync(trayEditorPreload)) {
+  const distStage = path.join(editorStage, 'dist');
+  fs.mkdirSync(distStage, { recursive: true });
+  fs.copyFileSync(trayEditorPreload, path.join(distStage, 'preload.cjs'));
+  console.log('[tray-dist] staged editor preload fallback');
+}
+
+const build = spawnSync(
+  'pnpm',
+  ['exec', 'electron-builder', '--win', 'nsis', 'dir', '--x64'],
+  {
+    cwd: trayRoot,
+    stdio: 'inherit',
+    shell: true,
+  },
 );
+if ((build.status ?? 1) !== 0) process.exit(build.status ?? 1);
 
-const stage = path.join(trayRoot, 'release-stage', 'apps');
-fs.rmSync(path.join(trayRoot, 'release-stage'), { recursive: true, force: true });
-fs.mkdirSync(stage, { recursive: true });
-
-if (runnerPortable) {
-  fs.copyFileSync(runnerPortable, path.join(stage, 'PkgRunner.exe'));
-  console.log('[tray-dist] staged runner', runnerPortable);
-} else {
-  console.warn('[tray-dist] runner portable exe not found');
+const releaseDir = path.join(trayRoot, 'release');
+const setups = fs.existsSync(releaseDir)
+  ? fs
+      .readdirSync(releaseDir)
+      .filter((n) => /Setup.*\.exe$/i.test(n) || /^PkgRunner-Setup/i.test(n))
+  : [];
+console.log('');
+console.log('[tray-dist] 安装包（推荐发给用户）:');
+for (const n of setups) console.log(' ', path.join(releaseDir, n));
+if (setups.length === 0) {
+  console.log(' ', path.join(releaseDir, 'PkgRunner-Setup-*.exe'));
 }
-if (editorPortable) {
-  fs.copyFileSync(editorPortable, path.join(stage, 'CodeEditor.exe'));
-  console.log('[tray-dist] staged editor', editorPortable);
-} else {
-  console.warn('[tray-dist] editor portable exe not found');
-}
-
-const build = spawnSync('pnpm', ['exec', 'electron-builder', '--win', 'portable', '--x64'], {
-  cwd: trayRoot,
-  stdio: 'inherit',
-  shell: true,
-});
-process.exit(build.status ?? 1);
+console.log('[tray-dist] 调试用解压目录:');
+console.log(' ', path.join(releaseDir, 'win-unpacked', 'PkgRunnerTray.exe'));
+console.log('');
+process.exit(0);

@@ -14,22 +14,33 @@ const distOut = path.join(root, 'dist');
 const dev = process.argv.includes('--dev');
 
 fs.rmSync(distOut, { recursive: true, force: true });
+fs.mkdirSync(distOut, { recursive: true });
 
-await esbuild.build({
-  entryPoints: [
-    path.join(root, 'src/main.ts'),
-    path.join(root, 'src/preload.ts'),
-  ],
-  outdir: distOut,
-  outbase: path.join(root, 'src'),
+const shared = {
   bundle: true,
   platform: 'node',
-  format: 'esm',
   target: 'node20',
   sourcemap: dev,
   minify: !dev,
   packages: 'bundle',
   external: ['electron', 'node-pty'],
+};
+
+await esbuild.build({
+  ...shared,
+  entryPoints: [path.join(root, 'src/main.ts')],
+  outfile: path.join(distOut, 'main.js'),
+  format: 'esm',
+});
+
+/** Preload must be .cjs — package.json "type":"module" makes .js load as ESM and breaks preload. */
+await esbuild.build({
+  ...shared,
+  entryPoints: [path.join(root, 'src/preload.ts')],
+  outdir: distOut,
+  outbase: path.join(root, 'src'),
+  format: 'cjs',
+  outExtension: { '.js': '.cjs' },
 });
 
 /** Copy xterm browser assets into ui/vendor for vanilla fallback (file://). */

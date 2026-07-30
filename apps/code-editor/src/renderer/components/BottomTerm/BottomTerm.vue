@@ -149,7 +149,6 @@ function onResizeEnd(): void {
 
 onMounted(() => {
   if (hostRef.value) props.ctrl.mount(hostRef.value);
-  void props.ctrl.hydratePrefs();
 });
 
 watch(

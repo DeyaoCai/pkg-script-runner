@@ -182,12 +182,13 @@ const treeDrag = makeDrag(
 );
 
 onMounted(() => {
-  void ctrl.bootstrap().then(() => {
+  void ctrl.bootstrap().then(async () => {
     ctrl.controllers.editor.syncFromShell();
     ctrl.controllers.git.syncFromShell();
     ctrl.controllers.toolbar.syncFromShell();
     ctrl.controllers.repos.syncFromShell();
     ctrl.controllers.designRepos.syncFromShell();
+    await ctrl.controllers.term.hydratePrefs();
   });
 });
 </script>

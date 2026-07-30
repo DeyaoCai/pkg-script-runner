@@ -57,6 +57,26 @@ const api = {
     return () => ipcRenderer.removeListener('ss:appearing', handler);
   },
 
+  onSnapGuides: (cb: (guides: { xs: number[]; ys: number[] }) => void) => {
+    const handler = (_: unknown, guides: { xs: number[]; ys: number[] }) =>
+      cb(guides);
+    ipcRenderer.on('ss:snap-guides', handler);
+    return () => ipcRenderer.removeListener('ss:snap-guides', handler);
+  },
+
+  onWindowTargets: (
+    cb: (
+      windows: { title: string; x: number; y: number; w: number; h: number }[],
+    ) => void,
+  ) => {
+    const handler = (
+      _: unknown,
+      windows: { title: string; x: number; y: number; w: number; h: number }[],
+    ) => cb(windows);
+    ipcRenderer.on('ss:window-targets', handler);
+    return () => ipcRenderer.removeListener('ss:window-targets', handler);
+  },
+
   cancel: (): Promise<void> => ipcRenderer.invoke('ss:cancel'),
 
   /** 首帧已画好，主进程可 show 遮罩 */

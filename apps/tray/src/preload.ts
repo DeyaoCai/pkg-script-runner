@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 export type SharedSettings = {
   screenshotHotkey: string;
   activateHotkey: string;
+  editorHotkey: string;
   screenshotHistoryLimit: number;
   fontId: string;
   glassAlpha: number;
@@ -26,6 +27,7 @@ const api = {
     ok: boolean;
     screenshotError: string | null;
     activateError: string | null;
+    editorError: string | null;
   }> => ipcRenderer.invoke('tray:hotkeys-resume'),
   startScreenshot: (): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('pkg:ss-start'),
@@ -63,6 +65,16 @@ const api = {
     error: string | null;
   }> => ipcRenderer.invoke('pkg:open-ss-history-dir'),
   closeWindow: (): Promise<void> => ipcRenderer.invoke('tray:window-close'),
+  diagLog: (event: string, detail?: unknown): Promise<void> =>
+    ipcRenderer.invoke('tray:diag-log', event, detail),
+  openDiagLog: (): Promise<string> => ipcRenderer.invoke('tray:open-diag-log'),
+  getDiagTail: (maxLines?: number): Promise<string> =>
+    ipcRenderer.invoke('tray:get-diag-tail', maxLines),
+  onSettings: (cb: (settings: SharedSettings) => void) => {
+    const handler = (_: unknown, settings: SharedSettings) => cb(settings);
+    ipcRenderer.on('tray:settings', handler);
+    return () => ipcRenderer.removeListener('tray:settings', handler);
+  },
   onHistoryChanged: (cb: () => void) => {
     const handler = () => cb();
     ipcRenderer.on('pkg:ss-history', handler);

@@ -88,6 +88,13 @@
         margin: 8px 0;
         font-size: 12px;
       }
+      .err.ok {
+        color: #81c995;
+      }
+      .footer .btn:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
       .footer {
         display: flex;
         justify-content: flex-end;
@@ -110,7 +117,7 @@
   </head>
   <body>
     <h1>设置</h1>
-    <p class="sub">托盘 / Runner / 编辑器共用</p>
+    <p class="sub">配置由托盘读写磁盘（%APPDATA%/pkg-runner/shared-settings.json），无需启动 Runner</p>
 
     <div class="sec">外观</div>
     <div class="row">
@@ -154,13 +161,18 @@
     <div class="sec">热键</div>
     <div class="row">
       <label class="field">截屏</label>
-      <button type="button" class="btn grow" id="shotHotkeyBtn">未设置</button>
+      <button type="button" class="btn grow" id="shotHotkeyBtn">加载中…</button>
       <button type="button" class="btn" id="clearShot">清除</button>
     </div>
     <div class="row">
-      <label class="field">显示 Runner</label>
-      <button type="button" class="btn grow" id="actHotkeyBtn">未设置</button>
+      <label class="field">显示/隐藏 Runner</label>
+      <button type="button" class="btn grow" id="actHotkeyBtn">加载中…</button>
       <button type="button" class="btn" id="clearAct">清除</button>
+    </div>
+    <div class="row">
+      <label class="field">显示/隐藏编辑器</label>
+      <button type="button" class="btn grow" id="editorHotkeyBtn">加载中…</button>
+      <button type="button" class="btn" id="clearEditor">清除</button>
     </div>
     <div class="row">
       <label class="field">截屏历史条数</label>
@@ -169,11 +181,14 @@
 
     <div class="err" id="err"></div>
     <div class="footer">
+      <button type="button" class="btn" id="diagBtn" title="打开诊断日志">日志</button>
       <button type="button" class="btn" id="closeBtn">关闭</button>
       <button type="button" class="btn primary" id="saveBtn">保存</button>
     </div>
     <script>
-      const api = window.trayApi;
+      function dlog(event, detail) {
+        void getTrayApi()?.diagLog?.(event, detail);
+      }
       const FONTS = [
         { id: 'jetbrains', label: 'JetBrains Mono' },
         { id: 'system', label: '系统默认' },
@@ -184,6 +199,12 @@
       let recording = null;
       let pendingShot = '';
       let pendingAct = '';
+      let pendingEditor = '';
+      let settingsHydrated = false;
+
+      function getTrayApi() {
+        return window.trayApi;
+      }
 
       function formatHotkey(accel) {
         const raw = String(accel || '').trim();
@@ -221,13 +242,63 @@
         document.getElementById('glassAlphaVal').textContent = e.target.value + '%';
       };
 
-      async function load() {
-        const s = await api.getSettings();
+      function setStatus(text, ok) {
+        const el = document.getElementById('err');
+        el.textContent = text || '';
+        el.classList.toggle('ok', !!ok);
+      }
+
+      async function ensureApi(maxMs) {
+        const limit = maxMs || 1500;
+        const start = Date.now();
+        while (Date.now() - start < limit) {
+          const api = getTrayApi();
+          if (api?.getSettings && api?.setSettings && api?.closeWindow) return api;
+          await new Promise((r) => setTimeout(r, 40));
+        }
+        return getTrayApi();
+      }
+
+      function readFormPatch() {
+        return {
+          screenshotHotkey: pendingShot,
+          activateHotkey: pendingAct,
+          editorHotkey: pendingEditor,
+          screenshotHistoryLimit: Number(document.getElementById('historyLimit').value),
+          fontId: fontSel.value,
+          theme: document.getElementById('theme').value,
+          glassAlpha: Number(document.getElementById('glassAlpha').value),
+          alwaysOnTop: document.getElementById('alwaysOnTop').checked,
+          shellMosaicCols: Number(document.getElementById('shellMosaicCols').value),
+          shellLayout: document.getElementById('shellLayout').value,
+          persistLogs: document.getElementById('persistLogs').checked,
+        };
+      }
+
+      async function closeSettingsWindow() {
+        const api = await ensureApi(800);
+        if (api?.closeWindow) {
+          await api.closeWindow();
+          return;
+        }
+        setStatus('无法关闭：托盘 API 不可用', false);
+      }
+
+      function applySettings(s) {
+        settingsHydrated = true;
+        dlog('apply', {
+          screenshotHotkey: s?.screenshotHotkey,
+          activateHotkey: s?.activateHotkey,
+          editorHotkey: s?.editorHotkey,
+          fontId: s?.fontId,
+        });
         pendingShot = s.screenshotHotkey || '';
         pendingAct = s.activateHotkey || '';
+        pendingEditor = s.editorHotkey || '';
         document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
         document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
-        document.getElementById('historyLimit').value = String(s.screenshotHistoryLimit);
+        document.getElementById('editorHotkeyBtn').textContent = formatHotkey(pendingEditor);
+        document.getElementById('historyLimit').value = String(s.screenshotHistoryLimit ?? 10);
         fontSel.value = s.fontId || 'jetbrains';
         document.getElementById('theme').value = s.theme || 'dark';
         document.getElementById('glassAlpha').value = String(s.glassAlpha ?? 55);
@@ -236,19 +307,60 @@
         document.getElementById('shellMosaicCols').value = String(s.shellMosaicCols ?? 2);
         document.getElementById('shellLayout').value = s.shellLayout || 'grid';
         document.getElementById('persistLogs').checked = !!s.persistLogs;
+        setStatus('', false);
+      }
+      window.__applyTraySettings = applySettings;
+
+      async function load() {
+        const api = getTrayApi();
+        dlog('load.start', {
+          hasApi: !!api,
+          hasGetSettings: typeof api?.getSettings === 'function',
+          hydrated: settingsHydrated,
+        });
+        if (!api?.getSettings) {
+          if (settingsHydrated) {
+            dlog('load.skip', { reason: 'already hydrated via tray inject' });
+            return;
+          }
+          document.getElementById('err').textContent =
+            '无法连接托盘 API，请关闭后从托盘重新打开设置';
+          dlog('load.fail', { reason: 'no trayApi.getSettings', hydrated: settingsHydrated });
+          return;
+        }
+        try {
+          const s = await api.getSettings();
+          dlog('load.ok', {
+            screenshotHotkey: s?.screenshotHotkey,
+            activateHotkey: s?.activateHotkey,
+          editorHotkey: s?.editorHotkey,
+          });
+          applySettings(s);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          document.getElementById('err').textContent = '加载设置失败：' + msg;
+          dlog('load.error', { message: msg });
+        }
       }
 
       async function startRecord(kind) {
         recording = kind;
-        const btn = kind === 'screenshot' ? 'shotHotkeyBtn' : 'actHotkeyBtn';
+        const api = getTrayApi();
+        const btn =
+          kind === 'screenshot'
+            ? 'shotHotkeyBtn'
+            : kind === 'activate'
+              ? 'actHotkeyBtn'
+              : 'editorHotkeyBtn';
         document.getElementById(btn).classList.add('recording');
         document.getElementById(btn).textContent = '按下热键…';
         document.getElementById('err').textContent = '';
-        await api.suspendHotkeys();
+        await api?.suspendHotkeys?.();
       }
 
       document.getElementById('shotHotkeyBtn').onclick = () => startRecord('screenshot');
       document.getElementById('actHotkeyBtn').onclick = () => startRecord('activate');
+      document.getElementById('editorHotkeyBtn').onclick = () => startRecord('editor');
       document.getElementById('clearShot').onclick = () => {
         pendingShot = '';
         document.getElementById('shotHotkeyBtn').textContent = formatHotkey('');
@@ -256,6 +368,10 @@
       document.getElementById('clearAct').onclick = () => {
         pendingAct = '';
         document.getElementById('actHotkeyBtn').textContent = formatHotkey('');
+      };
+      document.getElementById('clearEditor').onclick = () => {
+        pendingEditor = '';
+        document.getElementById('editorHotkeyBtn').textContent = formatHotkey('');
       };
 
       window.addEventListener('keydown', async (e) => {
@@ -266,50 +382,124 @@
           recording = null;
           document.getElementById('shotHotkeyBtn').classList.remove('recording');
           document.getElementById('actHotkeyBtn').classList.remove('recording');
+          document.getElementById('editorHotkeyBtn').classList.remove('recording');
           document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
           document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
-          await api.resumeHotkeys();
+          document.getElementById('editorHotkeyBtn').textContent = formatHotkey(pendingEditor);
+          await getTrayApi()?.resumeHotkeys?.();
           return;
         }
         const accel = keyToAccel(e);
         if (!accel) return;
         if (recording === 'screenshot') pendingShot = accel;
-        else pendingAct = accel;
+        else if (recording === 'activate') pendingAct = accel;
+        else pendingEditor = accel;
         recording = null;
         document.getElementById('shotHotkeyBtn').classList.remove('recording');
         document.getElementById('actHotkeyBtn').classList.remove('recording');
+        document.getElementById('editorHotkeyBtn').classList.remove('recording');
         document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
         document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
-        await api.resumeHotkeys();
+        document.getElementById('editorHotkeyBtn').textContent = formatHotkey(pendingEditor);
+        await getTrayApi()?.resumeHotkeys?.();
       });
 
       document.getElementById('saveBtn').onclick = async () => {
-        const res = await api.setSettings({
-          screenshotHotkey: pendingShot,
-          activateHotkey: pendingAct,
-          screenshotHistoryLimit: Number(document.getElementById('historyLimit').value),
-          fontId: fontSel.value,
-          theme: document.getElementById('theme').value,
-          glassAlpha: Number(document.getElementById('glassAlpha').value),
-          alwaysOnTop: document.getElementById('alwaysOnTop').checked,
-          shellMosaicCols: Number(document.getElementById('shellMosaicCols').value),
-          shellLayout: document.getElementById('shellLayout').value,
-          persistLogs: document.getElementById('persistLogs').checked,
-        });
-        if (res.hotkeyError) {
-          document.getElementById('err').textContent = res.hotkeyError;
-          pendingShot = res.settings.screenshotHotkey;
-          pendingAct = res.settings.activateHotkey;
-          document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
-          document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
-          return;
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.disabled = true;
+        const prev = saveBtn.textContent;
+        saveBtn.textContent = '保存中…';
+        dlog('save.click');
+        try {
+          const api = await ensureApi();
+          if (!api?.setSettings) {
+            setStatus('无法保存：托盘 API 不可用', false);
+            return;
+          }
+          const res = await api.setSettings(readFormPatch());
+          if (res.hotkeyError) {
+            setStatus(res.hotkeyError, false);
+            pendingShot = res.settings.screenshotHotkey;
+            pendingAct = res.settings.activateHotkey;
+            pendingEditor = res.settings.editorHotkey;
+            document.getElementById('shotHotkeyBtn').textContent = formatHotkey(pendingShot);
+            document.getElementById('actHotkeyBtn').textContent = formatHotkey(pendingAct);
+            document.getElementById('editorHotkeyBtn').textContent = formatHotkey(pendingEditor);
+            return;
+          }
+          dlog('save.ok');
+          await api.closeWindow();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setStatus('保存失败：' + msg, false);
+          dlog('save.error', { message: msg });
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = prev;
         }
-        document.getElementById('err').textContent = '';
-        await api.closeWindow();
       };
 
-      document.getElementById('closeBtn').onclick = () => api.closeWindow();
-      load();
+      document.getElementById('closeBtn').onclick = () => {
+        dlog('close.click');
+        void closeSettingsWindow();
+      };
+
+      document.getElementById('diagBtn').onclick = async () => {
+        dlog('diag.click');
+        const api = await ensureApi(800);
+        if (!api?.openDiagLog) {
+          setStatus('无法打开日志：托盘 API 不可用', false);
+          return;
+        }
+        try {
+          const result = await api.openDiagLog();
+          setStatus(result ? '已打开诊断日志' : '诊断日志文件尚未生成', !!result);
+        } catch (e) {
+          setStatus('打开日志失败：' + (e instanceof Error ? e.message : String(e)), false);
+        }
+      };
+
+      function boot() {
+        const api = getTrayApi();
+        dlog('boot', {
+          hasApi: !!api,
+          hasGetSettings: typeof api?.getSettings === 'function',
+          hydrated: settingsHydrated,
+        });
+        if (!api?.getSettings) {
+          if (settingsHydrated) {
+            dlog('boot.inject-only');
+            return true;
+          }
+          return false;
+        }
+        if (!boot.ready) {
+          api.onSettings?.((s) => {
+            if (!recording) applySettings(s);
+          });
+          boot.ready = true;
+        }
+        void load();
+        return true;
+      }
+      boot.ready = false;
+
+      if (!boot()) {
+        let tries = 0;
+        const timer = setInterval(() => {
+          tries += 1;
+          if (boot()) {
+            clearInterval(timer);
+          } else if (tries >= 40) {
+            clearInterval(timer);
+            if (!settingsHydrated) {
+              document.getElementById('err').textContent =
+                '无法连接托盘 API，请关闭后从托盘重新打开设置';
+            }
+            dlog('boot.timeout', { tries, hydrated: settingsHydrated });
+          }
+        }, 50);
+      }
     </script>
   </body>
 </html>

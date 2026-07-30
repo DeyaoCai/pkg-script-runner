@@ -51,18 +51,38 @@ export class LogPanelCtrl extends Controller<TData, TProps, TState> {
     };
   }
 
-  async togglePersist(): Promise<void> {
-    if (!this.app.api) return;
-    const next = !this.app.data.persistLogs;
-    this.app.setData({ persistLogs: await this.app.api.setPersistLogs(next) });
+  async togglePersistLogs(): Promise<void> {
+    const api = this.app.api;
+    if (!api?.requestTraySettingsPatch) {
+      this.app.flashMeta('落盘开关请在托盘设置中修改，或等待 Runner 连接托盘', true);
+      return;
+    }
+    try {
+      const next = !this.app.data.persistLogs;
+      await api.requestTraySettingsPatch({ persistLogs: next });
+      this.app.flashMeta(next ? '已请求开启落盘' : '已请求关闭落盘', false);
+    } catch (e) {
+      this.app.flashMeta(e instanceof Error ? e.message : String(e), true);
+    }
   }
 
   async openLogsDir(): Promise<void> {
-    await this.app.api?.openLogsDir();
+    if (!this.app.api?.openLogsDir) {
+      this.app.flashMeta('Runner API 不可用', true);
+      return;
+    }
+    const res = await this.app.api.openLogsDir();
+    if (res?.error) this.app.flashMeta(res.error, true);
+    else if (res?.dir) this.app.flashMeta(`已打开：${res.dir}`, false);
   }
 
   async clearDisk(): Promise<void> {
-    await this.app.api?.clearDiskLogs();
+    if (!this.app.api?.clearDiskLogs) {
+      this.app.flashMeta('Runner API 不可用', true);
+      return;
+    }
+    const res = await this.app.api.clearDiskLogs();
+    this.app.flashMeta(`已清除 ${res?.removed ?? 0} 个日志文件`, false);
   }
 
   selectTab(id: string): void {
@@ -89,11 +109,6 @@ export class LogPanelCtrl extends Controller<TData, TProps, TState> {
     if (e.key === 'End') next = tabs.length - 1;
     this.selectTab(tabs[next]!.id);
     document.querySelector<HTMLElement>(`.log-tab[data-log-tab="${tabs[next]!.id}"]`)?.focus();
-  }
-
-  async toggleLayout(): Promise<void> {
-    const next = this.app.data.settings.shellLayout === 'grid' ? 'single' : 'grid';
-    await this.app.persistSettings({ shellLayout: next });
   }
 
   isSystem(id: string): boolean {

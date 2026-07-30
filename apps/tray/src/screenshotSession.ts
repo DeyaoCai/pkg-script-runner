@@ -11,7 +11,7 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 import { captureMouseDisplay } from './screenshotCapture.js';
-import { getWindowSnapGuides, type SnapGuides } from './windowSnapGuides.js';
+import { getWindowSnapGuides, listCaptureWindows, type SnapGuides } from './windowSnapGuides.js';
 import {
   addScreenshotHistory,
   clearScreenshotHistory,
@@ -95,9 +95,10 @@ function ensureScreenshotProtocol(): void {
     if (!sessionPng?.length) {
       return new Response('Gone', { status: 404 });
     }
+    const isJpeg = sessionPng[0] === 0xff && sessionPng[1] === 0xd8;
     return new Response(sessionPng, {
       headers: {
-        'content-type': 'image/png',
+        'content-type': isJpeg ? 'image/jpeg' : 'image/png',
         'cache-control': 'no-store',
       },
     });
@@ -151,17 +152,18 @@ function takeSessionEnd(): (() => void) | null {
 
 /** 结束会话：隐藏预热窗，不销毁 */
 export async function closeScreenshotSession(opts?: {
-  /** 取消时渐隐，不用缩放 */
+  /** 取消时渐隐（默认关，避免 Esc「关不掉」） */
   fade?: boolean;
 }): Promise<void> {
   const win = shotWindow;
+  // 取消/完成优先立刻收起；渐隐可选，且短超时
   if (opts?.fade && win && !win.isDestroyed() && win.isVisible()) {
     try {
       win.webContents.send('ss:dismissing');
     } catch {
       /* ignore */
     }
-    const steps = 8;
+    const steps = 4;
     for (let i = 1; i <= steps; i++) {
       if (win.isDestroyed()) break;
       try {
@@ -169,7 +171,7 @@ export async function closeScreenshotSession(opts?: {
       } catch {
         break;
       }
-      await new Promise<void>((r) => setTimeout(r, 16));
+      await new Promise<void>((r) => setTimeout(r, 12));
     }
   }
 
@@ -177,6 +179,11 @@ export async function closeScreenshotSession(opts?: {
   if (win && !win.isDestroyed()) {
     try {
       win.webContents.send('ss:session-clear');
+    } catch {
+      /* ignore */
+    }
+    try {
+      win.setAlwaysOnTop(false);
     } catch {
       /* ignore */
     }
@@ -276,10 +283,11 @@ export function warmScreenshotWindow(opts: {
   });
 }
 
-async function fadeInWindow(win: BrowserWindow): Promise<void> {
+/** 热键唤起：立刻显示，不做渐显（单手体感） */
+function showWindowNow(win: BrowserWindow): void {
   if (win.isDestroyed()) return;
   try {
-    win.setOpacity(0);
+    win.setOpacity(1);
   } catch {
     /* ignore */
   }
@@ -289,23 +297,6 @@ async function fadeInWindow(win: BrowserWindow): Promise<void> {
     win.webContents.send('ss:appearing');
   } catch {
     /* ignore */
-  }
-  const steps = 8;
-  for (let i = 1; i <= steps; i++) {
-    if (win.isDestroyed()) return;
-    try {
-      win.setOpacity(Math.min(1, i / steps));
-    } catch {
-      break;
-    }
-    await new Promise<void>((r) => setTimeout(r, 16));
-  }
-  if (!win.isDestroyed()) {
-    try {
-      win.setOpacity(1);
-    } catch {
-      /* ignore */
-    }
   }
 }
 
@@ -328,18 +319,16 @@ export async function startScreenshotSession(opts: {
     const [win, captured] = await Promise.all([warmP, captureP]);
 
     const size = captured.image.getSize();
-    sessionPng = captured.image.toPNG();
-    const fileUrl = `pkgss://local/capture.png?t=${Date.now()}`;
-    const snapGuides = getWindowSnapGuides(captured.bounds);
+    // JPEG 编码比 PNG 快，仅作遮罩预览；最终裁剪仍由渲染进程出 PNG
+    sessionPng = captured.image.toJPEG(82);
+    const fileUrl = `pkgss://local/capture.jpg?t=${Date.now()}`;
     sessionPayload = {
       fileUrl,
       width: size.width,
       height: size.height,
-      snapGuides,
     };
     sessionActive = true;
 
-    // 先就位、仍隐藏；等内容画好再渐显，避免黑屏闪一下
     if (win.isVisible()) win.hide();
     try {
       win.setOpacity(0);
@@ -359,19 +348,32 @@ export async function startScreenshotSession(opts: {
       width: size.width,
       height: size.height,
       drawColor: getDrawColor(),
-      snapGuides,
+    });
+
+    // 窗口列表 / 吸附线放到显示之后算，不挡首帧
+    void Promise.resolve().then(() => {
+      if (!sessionActive || win.isDestroyed()) return;
+      try {
+        const windows = listCaptureWindows(captured.bounds);
+        const snapGuides = getWindowSnapGuides(captured.bounds);
+        if (sessionPayload) sessionPayload.snapGuides = snapGuides;
+        win.webContents.send('ss:window-targets', windows);
+        win.webContents.send('ss:snap-guides', snapGuides);
+      } catch {
+        /* ignore */
+      }
     });
 
     await Promise.race([
       readyP,
-      new Promise<void>((r) => setTimeout(r, 280)),
+      new Promise<void>((r) => setTimeout(r, 90)),
     ]);
     clearContentReadyWaiter();
 
     if (!sessionActive || win.isDestroyed()) {
       return { ok: false, error: '截屏已取消' };
     }
-    await fadeInWindow(win);
+    showWindowNow(win);
     return { ok: true };
   } catch (err) {
     closeScreenshotSession();
@@ -413,7 +415,7 @@ export function registerScreenshotIpc(hooks: {
   });
 
   ipcMain.handle('ss:cancel', async () => {
-    await closeScreenshotSession({ fade: true });
+    await closeScreenshotSession({ fade: false });
   });
 
   ipcMain.on('ss:content-ready', () => {
