@@ -3,7 +3,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, type Rectangle } from 'electron';
 import { fileURLToPath } from 'node:url';
 import {
   framelessWindowOptions,
@@ -103,11 +103,15 @@ function prefsPath(): string {
   return path.join(app.getPath('appData'), 'code-editor', 'prefs.json');
 }
 
+/** 软隐藏：屏外 + opacity 1（opacity 0 不参与 Win DWM，无法稳住其它无边框窗拖动） */
+const PARK_ORIGIN = { x: -12000, y: -12000 } as const;
+
 let hostMode: EditorHostMode = 'standalone';
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 let startHidden = false;
 let softHidden = false;
+let parkedBounds: Rectangle | null = null;
 let ipcRegistered = false;
 let prefs: TPrefs = {
   workspaceRoot: null,
@@ -200,6 +204,30 @@ function editorDiag(event: string, detail?: unknown): void {
   }
 }
 
+function parkWindowOffscreen(win: BrowserWindow): void {
+  const b = win.getBounds();
+  if (b.x > -5000 && b.y > -5000) {
+    parkedBounds = { ...b };
+  }
+  win.setOpacity(1);
+  win.setBounds({
+    x: PARK_ORIGIN.x,
+    y: PARK_ORIGIN.y,
+    width: Math.max(b.width, 900),
+    height: Math.max(b.height, 560),
+  });
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.setSkipTaskbar(true);
+  if (!win.isVisible()) win.showInactive();
+  win.blur();
+}
+
+function restoreParkedBounds(win: BrowserWindow): void {
+  if (!parkedBounds) return;
+  win.setBounds(parkedBounds);
+  parkedBounds = null;
+}
+
 function showWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
@@ -208,6 +236,7 @@ function showWindow(): void {
   softHidden = false;
   startHidden = false;
   try {
+    restoreParkedBounds(mainWindow);
     mainWindow.setSkipTaskbar(false);
     mainWindow.setIgnoreMouseEvents(false);
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -232,11 +261,7 @@ function hideWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   softHidden = true;
   try {
-    mainWindow.setOpacity(0);
-    mainWindow.setIgnoreMouseEvents(true, { forward: true });
-    mainWindow.setSkipTaskbar(true);
-    if (!mainWindow.isVisible()) mainWindow.show();
-    mainWindow.blur();
+    parkWindowOffscreen(mainWindow);
   } catch {
     try {
       mainWindow.hide();
@@ -251,7 +276,7 @@ function isEditorVisuallyOpen(): boolean {
   if (!mainWindow || mainWindow.isDestroyed()) return false;
   if (softHidden) return false;
   if (mainWindow.isMinimized()) return false;
-  return mainWindow.isVisible() && mainWindow.getOpacity() > 0.05;
+  return mainWindow.isVisible();
 }
 
 /** 显示 ↔ 隐藏（托盘热键 / 同进程直接调用） */
@@ -269,7 +294,7 @@ export function toggleEditorWindow(): void {
   }
 }
 
-/** 托盘预热：创建软隐藏窗口，热键只改 opacity */
+/** 托盘预热：创建后屏外停靠（opacity 1），热键只恢复 bounds */
 export function warmEditorWindow(): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     editorDiag('warm.skip', { reason: 'already' });
@@ -322,14 +347,19 @@ function createWindow(): void {
     if (startHidden) {
       softHidden = true;
       try {
-        mainWindow?.setOpacity(0);
-        mainWindow?.setIgnoreMouseEvents(true, { forward: true });
-        mainWindow?.setSkipTaskbar(true);
-        mainWindow?.show();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          parkedBounds = {
+            x: 80,
+            y: 60,
+            width: 1280,
+            height: 840,
+          };
+          parkWindowOffscreen(mainWindow);
+        }
       } catch {
         /* ignore */
       }
-      editorDiag('window.warm-hidden', { soft: true });
+      editorDiag('window.warm-hidden', { soft: true, park: true });
       return;
     }
     showWindow();

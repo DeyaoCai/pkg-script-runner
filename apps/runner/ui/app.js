@@ -2816,89 +2816,34 @@ closeBtn.addEventListener('click', () => {
   void api.windowClose();
 });
 
-// 标题栏：JS 拖窗（透明无边框下 CSS drag 不可靠）
-(function installWindowDragChrome() {
-  const canDrag =
-    typeof api.windowDragStart === 'function' &&
-    typeof api.windowDragMove === 'function' &&
-    typeof api.windowDragEnd === 'function';
+// 标题栏：不透明窗只用 CSS -webkit-app-region:drag。
+// JS setPosition 与原生 drag 叠用会闪烁，故仅保留双击最大化。
+(function installTitlebarChrome() {
+  const el = titlebarEl;
+  if (!el) return;
+  let lastTapAt = 0;
+  let lastTapX = 0;
+  let lastTapY = 0;
 
-  /**
-   * @param {Element | null} el
-   * @param {{
-   *   isDragTarget: (t: Element) => boolean,
-   *   isInteractive: (t: Element) => boolean,
-   *   onDoubleClick?: () => void,
-   * }} opts
-   */
-  function bindDragZone(el, opts) {
-    if (!el) return;
-    let lastTapAt = 0;
-    let lastTapX = 0;
-    let lastTapY = 0;
-    let dragging = false;
-    /** @type {number} */
-    let activePointerId = -1;
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    if (!(e.target instanceof Element)) return;
+    if (e.target.closest('.titlebar-actions, button, a, input, select, textarea')) return;
+    if (!e.target.closest('.titlebar-drag')) return;
 
-    el.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      if (!(e.target instanceof Element)) return;
-      if (opts.isInteractive(e.target)) return;
-      if (!opts.isDragTarget(e.target)) return;
-
-      const now = Date.now();
-      const dt = now - lastTapAt;
-      const dist = Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY);
-      if (dt > 0 && dt < 400 && dist < 10) {
-        lastTapAt = 0;
-        e.preventDefault();
-        opts.onDoubleClick?.();
-        return;
-      }
-      lastTapAt = now;
-      lastTapX = e.clientX;
-      lastTapY = e.clientY;
-
-      if (!canDrag) return;
-      dragging = true;
-      activePointerId = e.pointerId;
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-      api.windowDragStart({ screenX: e.screenX, screenY: e.screenY });
-    });
-
-    el.addEventListener('pointermove', (e) => {
-      if (!dragging || e.pointerId !== activePointerId || !canDrag) return;
-      api.windowDragMove({ screenX: e.screenX, screenY: e.screenY });
-    });
-
-    const endDrag = (e) => {
-      if (!dragging) return;
-      if (e && typeof e.pointerId === 'number' && e.pointerId !== activePointerId) return;
-      dragging = false;
-      activePointerId = -1;
-      if (canDrag) api.windowDragEnd();
-    };
-
-    el.addEventListener('pointerup', endDrag);
-    el.addEventListener('pointercancel', endDrag);
-    el.addEventListener('lostpointercapture', endDrag);
-  }
-
-  bindDragZone(titlebarEl, {
-    // Opaque window uses -webkit-app-region:drag; keep JS drag as fallback only
-    // when the pointer isn't claimed by a native drag region.
-    isDragTarget: (t) => !!t.closest('.titlebar-drag'),
-    isInteractive: (t) =>
-      !!t.closest('.titlebar-actions, button, a, input, select, textarea'),
-    onDoubleClick: () => {
+    const now = Date.now();
+    const dt = now - lastTapAt;
+    const dist = Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY);
+    if (dt > 0 && dt < 400 && dist < 10) {
+      lastTapAt = 0;
+      e.preventDefault();
       void api.windowMaximize().then(syncMaximizedUi);
-    },
+      return;
+    }
+    lastTapAt = now;
+    lastTapX = e.clientX;
+    lastTapY = e.clientY;
   });
-
 })();
 
 api.onLog((payload) => handleLogPayload(payload));

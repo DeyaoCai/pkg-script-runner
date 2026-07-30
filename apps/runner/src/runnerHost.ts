@@ -1151,11 +1151,9 @@ function createWindow() {
     title: 'Pkg Runner',
     show: false,
     frame: false,
-    // Opaque frameless: solid fill matches tokens --color-bg-base.
     transparent: false,
     backgroundColor: windowBackgroundForTheme(shared.theme),
     hasShadow: true,
-    roundedCorners: true,
     webPreferences: {
       preload: panelPreload(),
       contextIsolation: true,
@@ -1183,14 +1181,10 @@ function createWindow() {
 
   void loadMainWindow(mainWindow);
 
+  // 拖动时反复 focus 再 setAlwaysOnTop 会闪，仅 show 时钉一次
   mainWindow.on('show', () => {
     applyPinChrome();
   });
-  // Windows 偶发丢掉置顶位，聚焦时再钉一次
-  mainWindow.on('focus', () => {
-    if (shared.alwaysOnTop) applyPinChrome();
-  });
-
   mainWindow.on('maximize', () => {
     send('pkg:maximized', true);
   });

@@ -63,6 +63,10 @@ import {
   ensureAppShortcutsOnPackagedLaunch,
   installAppShortcuts,
 } from './desktopShortcut.js';
+import {
+  destroyCompositorKeepalive,
+  ensureCompositorKeepalive,
+} from './compositorKeepalive.js';
 
 function toggleEditor(): void {
   toggleEditorWindow();
@@ -119,7 +123,7 @@ let cmdWatcher: fs.FSWatcher | null = null;
 let stopSharedWatch: (() => void) | null = null;
 let appReady = false;
 let pendingOpenSettings = false;
-let warmEditorTimer: ReturnType<typeof setTimeout> | null = null;
+let warmHeavyTimer: ReturnType<typeof setTimeout> | null = null;
 
 function destroyAuxWindows(): void {
   for (const win of [settingsWin, historyWin]) {
@@ -148,9 +152,9 @@ function stopTrayWatchers(): void {
     /* ignore */
   }
   stopSharedWatch = null;
-  if (warmEditorTimer) {
-    clearTimeout(warmEditorTimer);
-    warmEditorTimer = null;
+  if (warmHeavyTimer) {
+    clearTimeout(warmHeavyTimer);
+    warmHeavyTimer = null;
   }
 }
 
@@ -189,6 +193,7 @@ function quitApp(): void {
   stopTrayWatchers();
   destroyAuxWindows();
   destroyScreenshotSession();
+  destroyCompositorKeepalive();
   shutdownRunnerHost();
   shutdownEditorHost();
   forceQuitProcess();
@@ -737,6 +742,8 @@ if (gotLock) {
     createTray();
     registerAllShortcuts();
     ensureAppShortcutsOnPackagedLaunch();
+    // Win：立刻挂不透明屏外窗，稳住「只开 Runner」拖动
+    ensureCompositorKeepalive();
     diagLog('tray', 'ui.tray-ready', { ms: Date.now() - t0 });
 
     await startRunnerHost({
@@ -744,14 +751,21 @@ if (gotLock) {
       getSharedSettings: () => settingsFromPrefs(prefs),
     });
     await startEditorHost({ mode: 'embedded' });
+    try {
+      warmEditorWindow();
+    } catch (err) {
+      diagLog('tray:editor', 'warm.error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     publishSettings();
     watchTrayCmd();
     stopSharedWatch = watchSharedSettings(onSharedSettingsChanged);
     diagLog('tray', 'hosts.ready', { ms: Date.now() - t0 });
 
-    // 空闲后再预热重窗（截屏 / 编辑器 / Runner），不堵启动
-    warmEditorTimer = setTimeout(() => {
-      warmEditorTimer = null;
+    // 截屏 / Runner 可延后预热，不堵托盘就绪
+    warmHeavyTimer = setTimeout(() => {
+      warmHeavyTimer = null;
       if (isQuitting) return;
       try {
         warmScreenshotWindow({
@@ -760,13 +774,6 @@ if (gotLock) {
         });
       } catch (err) {
         diagLog('tray', 'warm.screenshot.error', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      try {
-        warmEditorWindow();
-      } catch (err) {
-        diagLog('tray:editor', 'warm.error', {
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -796,6 +803,7 @@ if (gotLock) {
       stopTrayWatchers();
       destroyScreenshotSession();
       destroyAuxWindows();
+      destroyCompositorKeepalive();
       shutdownRunnerHost();
       shutdownEditorHost();
       return;
@@ -816,6 +824,7 @@ if (gotLock) {
     stopTrayWatchers();
     destroyAuxWindows();
     destroyScreenshotSession();
+    destroyCompositorKeepalive();
     shutdownRunnerHost();
     shutdownEditorHost();
   });
