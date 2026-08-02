@@ -111,6 +111,26 @@ export class LogPanelCtrl extends Controller<TData, TProps, TState> {
     document.querySelector<HTMLElement>(`.log-tab[data-log-tab="${tabs[next]!.id}"]`)?.focus();
   }
 
+  /** Ctrl/Cmd+A：只全选当前日志，不扫到面板标题等外面文案 */
+  onLogKeydown(e: KeyboardEvent): void {
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a') return;
+    const el = e.currentTarget;
+    if (!(el instanceof HTMLElement)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+
+  onLogMouseDown(e: MouseEvent): void {
+    const el = e.currentTarget;
+    if (!(el instanceof HTMLElement)) return;
+    if (document.activeElement !== el) el.focus({ preventScroll: true });
+  }
+
   isSystem(id: string): boolean {
     return id === SYSTEM_ID;
   }

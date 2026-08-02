@@ -2,6 +2,8 @@
   color: var(--muted);
   padding: 16px 12px;
   font-size: 13px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .log {
@@ -14,8 +16,9 @@
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  user-select: text;
-  -webkit-user-select: text;
+  /* 未聚焦时不可选，避免 Ctrl+A / 拖选扫到面板标题等其它文案 */
+  user-select: none;
+  -webkit-user-select: none;
   -webkit-user-drag: none;
   cursor: text;
   outline: none;
@@ -24,12 +27,20 @@
 .log:focus,
 .log:focus-visible {
   outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.log:focus span,
+.log:focus-visible span {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .log span {
   white-space: inherit;
-  user-select: text;
-  -webkit-user-select: text;
+  user-select: inherit;
+  -webkit-user-select: inherit;
   -webkit-user-drag: none;
 }
 

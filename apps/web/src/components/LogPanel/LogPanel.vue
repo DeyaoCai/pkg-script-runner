@@ -113,6 +113,8 @@
           aria-readonly="true"
           :data-log-id="s.id"
           v-html="app.getSessionHtml(s)"
+          @keydown="ctrl.onLogKeydown($event)"
+          @mousedown="ctrl.onLogMouseDown($event)"
         />
       </div>
     </div>
@@ -178,6 +180,8 @@
           aria-readonly="true"
           :data-log-id="s.id"
           v-html="app.getSessionHtml(s)"
+          @keydown="ctrl.onLogKeydown($event)"
+          @mousedown="ctrl.onLogMouseDown($event)"
         />
       </div>
     </div>
