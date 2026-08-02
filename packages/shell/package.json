@@ -2,6 +2,8 @@
   "name": "@pkg-runner/shell",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "author": "DeyaoCai",
   "type": "module",
   "description": "Shared Electron shell: frameless window IPC, reveal in OS explorer, tip directive, window controls",
   "exports": {

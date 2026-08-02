@@ -2,9 +2,10 @@
   "name": "@pkg-runner/tray",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Pkg Runner — tray + runner + screenshot (single process)",
-  "author": "DS Agent",
+  "author": "DeyaoCai",
   "main": "dist/main.js",
   "files": [
     "dist",

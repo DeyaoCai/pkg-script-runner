@@ -2,6 +2,8 @@
   "name": "@pkg-runner/tokens",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "author": "DeyaoCai",
   "type": "module",
   "description": "Shared design tokens + theme apply/read (CSS + JS)",
   "exports": {

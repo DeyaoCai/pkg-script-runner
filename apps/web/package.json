@@ -2,6 +2,8 @@
   "name": "@pkg-runner/web",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "author": "DeyaoCai",
   "type": "module",
   "description": "Pkg Runner Vue 3 renderer",
   "scripts": {

@@ -2,9 +2,10 @@
   "name": "@pkg-runner/code-editor",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "轻量代码编辑器：WebStorm 式布局、多项目根、Git Diff 跳转",
-  "author": "DS Agent",
+  "author": "DeyaoCai",
   "main": "dist/main/main.js",
   "files": [
     "dist",
