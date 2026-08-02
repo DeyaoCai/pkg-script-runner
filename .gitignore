@@ -20,17 +20,9 @@ node_modules/
 **/release/
 *.tsbuildinfo
 
-# Electron
-apps/desktop/ui/fonts/
-apps/desktop/ui/vendor/
-
 # Accidental tray preload emit
 apps/tray/preload.js
 
 # @pkg-runner/tokens sync outputs (source: packages/tokens)
 apps/tray/ui/tokens.css
 apps/tray/ui/pkg-tokens.js
-apps/runner/ui/tokens.css
-
-# @pkg-runner/assets sync (source: packages/assets/media)
-apps/runner/ui/logo.png

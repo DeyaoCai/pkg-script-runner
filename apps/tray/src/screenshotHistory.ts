@@ -588,24 +588,3 @@ export async function exportScreenshotDocument(opts: {
   return { ok: true, path: filePath, count: collected.entries.length, format };
 }
 
-/** @deprecated 使用 exportScreenshotDocument({ format: 'md' }) */
-export async function exportScreenshotMarkdown(opts: {
-  ids: string[];
-  mdPath: string;
-}): Promise<{ ok: boolean; error?: string; mdPath?: string; count?: number }> {
-  const res = await exportScreenshotDocument({
-    ids: opts.ids,
-    filePath: opts.mdPath,
-    format: 'md',
-  });
-  return {
-    ok: res.ok,
-    error: res.error,
-    mdPath: res.path,
-    count: res.count,
-  };
-}
-
-/** @deprecated */
-export const exportScreenshotBugList = exportScreenshotMarkdown;
-

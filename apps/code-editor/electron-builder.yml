@@ -1,6 +1,6 @@
 appId: local.pkg-runner.code-editor
 productName: Code Editor
-copyright: Copyright © DS Agent
+copyright: Copyright © DeyaoCai
 artifactName: CodeEditor-${version}-${os}-${arch}.${ext}
 directories:
   output: release

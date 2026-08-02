@@ -77,7 +77,7 @@ import {
   pkgRunnerColorEnv,
   pkgRunnerProfileName,
 } from '../../runner/src/appProfile.js';
-import { resolveEnvAssetPath } from '../../runner/src/appIcons.js';
+import { resolveEnvAssetPath } from '@pkg-runner/assets';
 
 function toggleEditor(): void {
   toggleEditorWindow();
@@ -107,13 +107,13 @@ function syncBrandEnvFromPrefs(): void {
 
 /** 任务栏 / 标题栏用较大 icon；托盘用 tray* */
 function resolveAppIconPath(): string {
-  return resolveEnvAssetPath(APP_ROOT, 'icon');
+  return resolveEnvAssetPath('icon', activeBrandTone());
 }
 
 function resolveTrayIconPath(): string {
-  // Win 托盘缩到 16px：用较大的 icon-* 比 tray-* 更易辨认棕/蓝
+  // Win 托盘缩到 16px：用较大的 icon-* 比 tray-* 更易辨认正式/测试
   const kind = process.platform === 'win32' ? 'icon' : 'tray';
-  const p = resolveEnvAssetPath(APP_ROOT, kind);
+  const p = resolveEnvAssetPath(kind, activeBrandTone());
   if (activeBrandTone() === 'test' && !/-test\.png$/i.test(path.basename(p))) {
     diagLog('tray', 'icon.missing-test', { kind, path: p });
   }

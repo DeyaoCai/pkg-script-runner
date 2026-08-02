@@ -6,6 +6,11 @@
 
 **License:** [MIT](LICENSE) · **Platform:** Windows-first (Node ≥ 20, pnpm 9) · **Security:** [SECURITY.md](SECURITY.md) · **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
 
+**仓库：**
+
+- Gitee：https://gitee.com/DeyaoCai/pkg-script-runner.git
+- GitHub：https://github.com/DeyaoCai/pkg-script-runner.git
+
 控制面仅监听本机 `127.0.0.1`（Bearer token）；截屏与脚本执行权限同当前用户。
 
 ```
@@ -37,8 +42,8 @@ packages/controller @pkg-runner/controller   Vue Controller 基类
 
 ```bash
 pnpm install
-pnpm --filter @pkg-runner/assets build   # 品牌图 + sync runner/ui/logo.png
-pnpm --filter @pkg-runner/tokens build   # 主题包 + 同步 tray/runner 的 tokens.css
+pnpm --filter @pkg-runner/assets build   # 品牌图路径包
+pnpm --filter @pkg-runner/tokens build   # 主题包 + sync tray ui tokens
 pnpm rebuild:native                      # Runner 的 node-pty，可选
 pnpm dev                                 # 托盘（同进程嵌入 Runner / Editor）
 pnpm dev:runner                          # 独立跑 Runner（Vite :5200 + Electron）

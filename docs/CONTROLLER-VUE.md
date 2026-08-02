@@ -70,9 +70,9 @@ apps/web/src/
     App.vue
     AppCtrl.ts
   components/
-    ProjectsPanel/
-      ProjectsPanel.vue
-      ProjectsPanelCtrl.ts
+    ScriptsPanel/
+      ScriptsPanel.vue
+      ScriptsPanelCtrl.ts
     LogPanel/
       LogPanel.vue
       LogPanelCtrl.ts

@@ -1,6 +1,6 @@
 appId: local.pkg-runner.runner
 productName: Pkg Runner
-copyright: Copyright © DS Agent
+copyright: Copyright © DeyaoCai
 artifactName: PkgRunner-${version}-${os}-${arch}.${ext}
 directories:
   output: release

@@ -4,7 +4,6 @@
 import {
   BRAND_PRESET_PROD,
   brandColorForTone,
-  brandToneFromColor,
   normalizeBrandColor,
   type BrandTone,
 } from '@pkg-runner/tokens';
@@ -15,7 +14,6 @@ export type { BrandTone };
 export {
   BRAND_PRESET_PROD,
   brandColorForTone,
-  brandToneFromColor,
   normalizeBrandColor,
 };
 

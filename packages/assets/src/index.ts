@@ -1,17 +1,27 @@
 /**
  * Canonical brand media under packages/assets/media.
- * Electron apps resolve paths at runtime from this package (packed via node_modules).
+ * Resolve via package.json so paths stay valid when this module is esbuild-bundled
+ * into tray/runner main (import.meta.url would otherwise point at dist/main.js).
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 export type BrandAssetKind = 'icon' | 'tray';
 export type BrandColorEnv = 'prod' | 'test';
 
+const require = createRequire(import.meta.url);
+
 /** Absolute path to packages/assets/media */
 export function brandAssetsDir(): string {
-  return path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'media');
+  try {
+    const pkgJson = require.resolve('@pkg-runner/assets/package.json');
+    return path.join(path.dirname(pkgJson), 'media');
+  } catch {
+    // Dev / direct load of package source or dist
+    return path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'media');
+  }
 }
 
 export function brandAssetPath(fileName: string): string {
@@ -28,8 +38,4 @@ export function resolveEnvAssetPath(
   const prodPath = brandAssetPath(`${kind}.png`);
   if (env === 'test' && fs.existsSync(testPath)) return testPath;
   return prodPath;
-}
-
-export function logoPath(): string {
-  return brandAssetPath('logo.png');
 }

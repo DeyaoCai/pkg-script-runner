@@ -10,10 +10,7 @@ const pkgRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoApps = path.join(pkgRoot, '..', '..', 'apps');
 const cssSrc = path.join(pkgRoot, 'tokens.css');
 
-const cssTargets = [
-  path.join(repoApps, 'runner', 'ui', 'tokens.css'),
-  path.join(repoApps, 'tray', 'ui', 'tokens.css'),
-];
+const cssTargets = [path.join(repoApps, 'tray', 'ui', 'tokens.css')];
 
 const banner =
   '/* GENERATED from packages/tokens/tokens.css — do not edit; run pnpm --filter @pkg-runner/tokens sync */\n';

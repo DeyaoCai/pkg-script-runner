@@ -5,11 +5,10 @@
 
 export const BRAND_PRESET_PROD = '#669851';
 export const BRAND_PRESET_TEST = '#C15E22';
-/** 旧正式色；normalize 时映射到 BRAND_PRESET_PROD */
-export const LEGACY_BRAND_PRESET_PROD = '#3D8BFD';
 
 export type BrandTone = 'prod' | 'test';
 
+/** 历史内联 accent 变量名；apply 时清掉，统一走 --tone */
 const LEGACY_INLINE_VARS = [
   '--brand',
   '--brand-700',
@@ -50,46 +49,11 @@ export function normalizeBrandColor(
 ): string {
   if (typeof raw !== 'string') return fallback.toUpperCase();
   const h = raw.trim();
-  let out = '';
-  if (/^#[0-9a-fA-F]{6}$/.test(h)) out = h.toUpperCase();
-  else if (/^#[0-9a-fA-F]{3}$/.test(h)) {
-    out = `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}`.toUpperCase();
-  } else {
-    return fallback.toUpperCase();
+  if (/^#[0-9a-fA-F]{6}$/.test(h)) return h.toUpperCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(h)) {
+    return `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}`.toUpperCase();
   }
-  if (out === LEGACY_BRAND_PRESET_PROD) return BRAND_PRESET_PROD;
-  return out;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const m = /^#([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})$/i.exec(hex);
-  if (!m) return null;
-  return {
-    r: parseInt(m[1]!, 16),
-    g: parseInt(m[2]!, 16),
-    b: parseInt(m[3]!, 16),
-  };
-}
-
-function dist(
-  a: { r: number; g: number; b: number },
-  b: { r: number; g: number; b: number },
-): number {
-  const dr = a.r - b.r;
-  const dg = a.g - b.g;
-  const db = a.b - b.b;
-  return dr * dr + dg * dg + db * db;
-}
-
-export function brandToneFromColor(hex: string): BrandTone {
-  const u = normalizeBrandColor(hex);
-  if (u === BRAND_PRESET_TEST) return 'test';
-  if (u === BRAND_PRESET_PROD) return 'prod';
-  const rgb = hexToRgb(u);
-  const prod = hexToRgb(BRAND_PRESET_PROD);
-  const test = hexToRgb(BRAND_PRESET_TEST);
-  if (!rgb || !prod || !test) return 'prod';
-  return dist(rgb, test) < dist(rgb, prod) ? 'test' : 'prod';
+  return fallback.toUpperCase();
 }
 
 export function brandColorForTone(tone: BrandTone): string {

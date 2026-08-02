@@ -1,8 +1,6 @@
 /**
  * Smoke-check PTY + Vue shell wiring for pkg-runner interactive shell.
  * Does not launch the full Electron window.
- *
- * Production UI is @pkg-runner/web (TerminalView); ui/app.js is legacy fallback only.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,12 +18,6 @@ function ok(msg) {
 function bad(msg) {
   console.error('FAIL', msg);
   failed += 1;
-}
-
-for (const f of ['xterm.js', 'xterm.css', 'addon-fit.js']) {
-  const p = path.join(root, 'ui', 'vendor', f);
-  if (fs.existsSync(p) && fs.statSync(p).size > 100) ok(`vendor/${f}`);
-  else bad(`missing vendor/${f}`);
 }
 
 const termCtrl = path.join(webSrc, 'components', 'TerminalView', 'TerminalViewCtrl.ts');

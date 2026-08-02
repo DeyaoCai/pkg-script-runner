@@ -1,4 +1,4 @@
-/** Shared font presets — types for @ds-agent/fonts/catalog.js */
+/** Shared font presets — types for @pkg-runner/fonts/catalog.js */
 
 export type TFontPreset = {
   id: string;

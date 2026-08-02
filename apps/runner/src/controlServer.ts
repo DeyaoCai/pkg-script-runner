@@ -536,11 +536,3 @@ function readEndpointFile(): ControlEndpointInfo | null {
     return null;
   }
 }
-
-/** @deprecated 旧名：现为 HTTP 控制面 */
-export async function startControlBridge(
-  opts: ControlServerHandles & { intervalMs?: number },
-): Promise<() => void> {
-  const srv = await startControlServer(opts);
-  return () => srv.stop();
-}

@@ -8,7 +8,6 @@
 - 主题：`ui/tokens.css` 由 `@pkg-runner/tokens` sync 生成
 - 停脚本：优先 Windows Job Object；端口面板可清漂移监听
 - 控制面：见 [docs/CONTROL-API.md](../../docs/CONTROL-API.md)；CLI `pnpm --filter @pkg-runner/runner ctl -- …`
-
-`ui/app.js` + `index.vanilla.html` 为旧版 file:// 回退，生产 UI 以 `@pkg-runner/web` → `dist-ui` 为准。
+- 主窗口 UI：`@pkg-runner/web` → `dist-ui`（`ui/styles` 为 Vue 全局样式；另有 glass 试验页与字体）
 
 截屏与托盘由 `@pkg-runner/tray` 负责。

@@ -1,10 +1,8 @@
 export {
   BRAND_PRESET_PROD,
   BRAND_PRESET_TEST,
-  LEGACY_BRAND_PRESET_PROD,
   applyBrandColorToRoot,
   brandColorForTone,
-  brandToneFromColor,
   normalizeBrandColor,
   type BrandTone,
   type StyleRoot,

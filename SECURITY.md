@@ -6,7 +6,10 @@ Pkg Runner is a **local** desktop tool (Electron). The control plane binds to `1
 
 ## Reporting
 
-If you find a vulnerability (especially around the control HTTP API, token discovery, or unintended process kill/port reap), please open a private report via the repository host (Gitee / GitHub security advisory if available), or contact the maintainer listed on the remote.
+If you find a vulnerability (especially around the control HTTP API, token discovery, or unintended process kill/port reap), please open a private report on either mirror (security advisory if available), or contact the maintainer listed on the remote:
+
+- https://gitee.com/DeyaoCai/pkg-script-runner
+- https://github.com/DeyaoCai/pkg-script-runner
 
 Please include:
 

@@ -35,7 +35,7 @@ Authorization: Bearer <token>
 | POST | `/v1/shell` | `{ action: "open"\|"exec"\|"close"\|"list", dir?, command?, id? }` |
 | POST | `/v1/ports` | `{ action: "list"\|"kill"\|"reap", port?, pid?, nodeOnly? }` |
 
-已移除：`POST /v1/reload-settings`（曾为 no-op）。刷新配置请由托盘 `POST /v1/settings` 推送。
+配置刷新由托盘 `POST /v1/settings` 推送（Runner 不读盘）。
 
 ## `/v1/ports` 行为摘要
 

@@ -3,8 +3,6 @@ dist/
 release/
 release-stage/
 ui/fonts/
-ui/fonts-catalog.js
-ui/vendor/
 *.exe
 *.blockmap
 builder-effective-config.yaml

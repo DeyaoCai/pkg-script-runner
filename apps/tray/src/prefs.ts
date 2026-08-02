@@ -5,7 +5,6 @@ import {
   BRAND_PRESET_PROD,
   BRAND_PRESET_TEST,
   brandColorForTone,
-  brandToneFromColor,
   normalizeBrandColor,
 } from '@pkg-runner/tokens';
 import { pkgRunnerColorEnv } from '../../runner/src/appProfile.js';
@@ -15,7 +14,6 @@ export {
   BRAND_PRESET_PROD,
   BRAND_PRESET_TEST,
   brandColorForTone,
-  brandToneFromColor,
   normalizeBrandColor,
 };
 

@@ -50,7 +50,7 @@ import { flushLogsNow, startControlServer } from './controlServer.js';
 import { diagLog, diagLogPath, readDiagTail } from './diagLog.js';
 import { chromeBackground } from '@pkg-runner/tokens';
 import { pkgRunnerColorEnv, type PkgRunnerColorEnv } from './appProfile.js';
-import { resolveEnvAssetPath } from './appIcons.js';
+import { resolveEnvAssetPath } from '@pkg-runner/assets';
 import {
   killByPid,
   killByPort,
@@ -165,7 +165,7 @@ async function loadMainWindow(win: BrowserWindow): Promise<void> {
     });
     return;
   }
-  // dist 没有时再试本地 Vite（仅 unpackaged；短超时，失败立刻 fallback）
+  // dist 没有时再试本地 Vite（仅 unpackaged；短超时）
   if (!uiUrl && !forceVite && !app.isPackaged) {
     try {
       const res = await fetch(UI_DEV_URL, {
@@ -185,14 +185,18 @@ async function loadMainWindow(win: BrowserWindow): Promise<void> {
       /* fall through */
     }
   }
-  const vanilla = path.join(runnerAppRoot(), 'ui', 'index.vanilla.html');
-  await win.loadFile(vanilla);
-  diagLog('runner', 'ui.load.fallback', {
-    via: 'vanilla',
-    file: vanilla,
+  const stub = path.join(runnerAppRoot(), 'ui', 'index.html');
+  diagLog('runner', 'ui.load.missing', {
     missingDist: distIndex,
     ms: Date.now() - t0,
   });
+  if (fs.existsSync(stub)) {
+    await win.loadFile(stub);
+    return;
+  }
+  throw new Error(
+    `Runner UI missing: build @pkg-runner/web → dist-ui (looked for ${distIndex})`,
+  );
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -1602,7 +1606,7 @@ function closeGlassLabs() {
 
 function createWindow() {
   const colorEnv = pkgRunnerColorEnv();
-  const appIcon = resolveEnvAssetPath(runnerAppRoot(), 'icon');
+  const appIcon = resolveEnvAssetPath('icon', pkgRunnerColorEnv());
   mainWindow = new BrowserWindow({
     width: 900,
     height: 520,

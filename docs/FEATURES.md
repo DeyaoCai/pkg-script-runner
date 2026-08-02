@@ -62,4 +62,4 @@ Pkg Runner 今日能力一览（Windows 优先）。实现细节见各 app READM
 - 控制面勿暴露到非本机；token 与 prefs 在 userData，勿提交
 - Runner **不读盘**配置，只接收托盘 `POST /v1/settings`
 - 截屏与脚本执行权限等同当前登录用户
-- 生产 UI 以 `@pkg-runner/web` → `dist-ui` 为准；`ui/app.js` 仅为旧版 file:// 回退
+- 主窗口 UI：`@pkg-runner/web` → `apps/runner/dist-ui`

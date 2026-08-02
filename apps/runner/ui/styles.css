@@ -1,7 +1,7 @@
 /**
  * Pkg Runner UI styles — barrel.
  * Source modules live in ./styles/*.css (split from the former monolith).
- * Vanilla (`index.vanilla.html`) and Vue (`ui-vue`) both import this file.
+ * Consumed by `@pkg-runner/web` via `apps/web/src/main.ts`.
  */
 @import './styles/01-theme.css';
 @import './styles/02-base.css';

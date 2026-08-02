@@ -53,13 +53,11 @@ chromeBackground('prod', 'dark'); // → 固定 hex，与 --color-bg-base 对齐
 | 主进程窗口底色 | `src/chrome.ts` 的 `CHROME_BG` / `chromeBackground`（与 `--color-bg-base` 对齐的固定 hex） |
 | 布局尺寸 | 各 app 自己的 layout CSS（如 editor `layout.css`），不要塞进 tokens |
 
-旧正式蓝 `#3D8BFD` 在 `normalizeBrandColor` 里会映射到当前 `BRAND_PRESET_PROD`。
-
 ## 脚本
 
 ```bash
-pnpm --filter @pkg-runner/tokens build   # tsc + sync 到 tray/runner ui
+pnpm --filter @pkg-runner/tokens build   # tsc + sync 到 tray ui
 pnpm --filter @pkg-runner/tokens sync    # 只复制 CSS / 打 IIFE
 ```
 
-`apps/runner/ui/tokens.css`、`apps/tray/ui/tokens.css`、`apps/tray/ui/pkg-tokens.js` 为 sync 生成物（已 gitignore），勿手改；改源后跑 `pnpm --filter @pkg-runner/tokens build`。
+`apps/tray/ui/tokens.css`、`apps/tray/ui/pkg-tokens.js` 为 sync 生成物（已 gitignore），勿手改；改源后跑 `pnpm --filter @pkg-runner/tokens build`。
