@@ -4,14 +4,17 @@
  * 发现：%APPDATA%/<profile>/control/http.json（prod: pkg-runner，dev: pkg-runner-dev）
  *   { host, port, token, baseUrl, pid }
  *
- * API（均需 Header: Authorization: Bearer <token>，除 GET /health）：
+ * API（除 GET /health 外均需 Header: Authorization: Bearer <token>）：
  *   GET  /health
+ *   GET  /v1/endpoint
+ *   POST /v1/settings       body: SharedSettings 片段（托盘推送）
+ *   POST /v1/window/toggle
  *   POST /v1/flush-logs
- *   POST /v1/scripts   body: { action: 'start'|'restart'|'stop', script, dir? }
- *   POST /v1/shell     body: { action: 'open'|'exec'|'close'|'list', dir?, command?, id? }
- *   POST /v1/ports     body: { action: 'list'|'kill'|'reap', port?, pid?, nodeOnly? }
+ *   POST /v1/scripts        body: { action, script, dir? }
+ *   POST /v1/shell          body: { action, dir?, command?, id? }
+ *   POST /v1/ports          body: { action: 'list'|'kill'|'reap', port?, pid?, nodeOnly? }
  *
- * 不用 npm bin、不靠文件 req/ack 轮询。
+ * 完整说明见 docs/CONTROL-API.md。不用 npm bin、不靠文件 req/ack 轮询。
  */
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
@@ -347,11 +350,6 @@ export async function startControlServer(
       if (method === 'POST' && pathname === '/v1/window/toggle') {
         handles.onToggleWindow?.();
         sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (method === 'POST' && pathname === '/v1/reload-settings') {
-        sendJson(res, 200, { ok: true, note: 'settings pushed by tray via POST /v1/settings' });
         return;
       }
 

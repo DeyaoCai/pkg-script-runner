@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
  * 开发期便利：读 control/http.json，调本机 HTTP 控制面（不是对外 bin）。
+ * 路由说明：docs/CONTROL-API.md
  *
- *   pnpm --filter pkg-runner ctl -- health
- *   pnpm --filter pkg-runner ctl -- flush-logs
- *   pnpm --filter pkg-runner ctl -- start|restart|stop <script> [dir]
- *   pnpm --filter pkg-runner ctl -- shell-open [dir]
- *   pnpm --filter pkg-runner ctl -- shell-exec <command> [dir]
- *   pnpm --filter pkg-runner ctl -- shell-close [id|dir]
- *   pnpm --filter pkg-runner ctl -- shell-list [dir]
- *   pnpm --filter pkg-runner ctl -- ports
- *   pnpm --filter pkg-runner ctl -- port-kill <port>
- *   pnpm --filter pkg-runner ctl -- ports-reap [--all]
+ *   pnpm --filter @pkg-runner/runner ctl -- health
+ *   pnpm --filter @pkg-runner/runner ctl -- flush-logs
+ *   pnpm --filter @pkg-runner/runner ctl -- start|restart|stop <script> [dir]
+ *   pnpm --filter @pkg-runner/runner ctl -- shell-open [dir]
+ *   pnpm --filter @pkg-runner/runner ctl -- shell-exec <command> [dir]
+ *   pnpm --filter @pkg-runner/runner ctl -- shell-close [id|dir]
+ *   pnpm --filter @pkg-runner/runner ctl -- shell-list [dir]
+ *   pnpm --filter @pkg-runner/runner ctl -- ports
+ *   pnpm --filter @pkg-runner/runner ctl -- port-kill <port>
+ *   pnpm --filter @pkg-runner/runner ctl -- ports-reap [--all]
  */
 import fs from 'node:fs';
 import os from 'node:os';
