@@ -1,6 +1,8 @@
 # Pkg Runner
 
-本机桌面工具：在系统托盘里管理 Node / 包管理器脚本——一键启停、伪终端日志、端口清理，并附带轻量代码编辑与截屏。Windows 优先；托盘同进程可嵌入 Runner 与 Editor，也支持单独开发调试。
+**Windows 托盘脚本启动器**——一键启停 `npm` / `pnpm` / `yarn` 脚本，网格 Shell、伪终端日志、端口清理。给本机联调用，也适合给 Claude Code 当侧车：Agent 改代码，Runner 管进程。
+
+附带轻量代码编辑、多仓工作区与截屏；当前阶段主打 **Runner**。托盘同进程可嵌入 Runner / Editor，也可单独调试。
 
 **License:** [MIT](LICENSE) · **Platform:** Windows-first (Node ≥ 20, pnpm 9) · **Security:** [SECURITY.md](SECURITY.md) · **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
 
