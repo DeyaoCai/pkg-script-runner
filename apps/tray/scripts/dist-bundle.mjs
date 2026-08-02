@@ -7,6 +7,7 @@
  *   pnpm --filter @pkg-runner/tray build
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +25,19 @@ function copyDir(src, dest) {
     if (ent.isDirectory()) copyDir(from, to);
     else fs.copyFileSync(from, to);
   }
+}
+
+function desktopDir() {
+  const home = process.env.USERPROFILE || os.homedir();
+  const candidates = [
+    process.env.OneDrive ? path.join(process.env.OneDrive, 'Desktop') : null,
+    path.join(home, 'Desktop'),
+    path.join(home, '桌面'),
+  ].filter(Boolean);
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return path.join(home, 'Desktop');
 }
 
 const stageRoot = path.join(trayRoot, 'release-stage');
@@ -94,6 +108,25 @@ for (const n of setups) console.log(' ', path.join(releaseDir, n));
 if (setups.length === 0) {
   console.log(' ', path.join(releaseDir, 'PkgRunner-Setup-*.exe'));
 }
+
+const desk = desktopDir();
+if (setups.length > 0) {
+  try {
+    fs.mkdirSync(desk, { recursive: true });
+    for (const n of setups) {
+      const from = path.join(releaseDir, n);
+      const to = path.join(desk, n);
+      fs.copyFileSync(from, to);
+      console.log('[tray-dist] 已复制到桌面:', to);
+    }
+  } catch (err) {
+    console.warn(
+      '[tray-dist] 复制到桌面失败:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 console.log('[tray-dist] 调试用解压目录:');
 console.log(' ', path.join(releaseDir, 'win-unpacked', 'PkgRunnerTray.exe'));
 console.log('');
