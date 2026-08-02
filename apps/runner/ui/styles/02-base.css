@@ -44,11 +44,21 @@ body {
   background: var(--bg-base);
   color: var(--text);
   font-family: var(--sans);
+  font-size: var(--fs-12);
+  line-height: var(--lh-body);
   text-shadow: var(--text-shadow);
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
   overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  font-size: var(--fs-12);
 }
 
 .app-shell {
@@ -117,7 +127,7 @@ body {
 /* Must win over the rule above: titlebar overlays body-pad (padding reserves space). */
 .app-shell > .titlebar {
   position: absolute;
-  z-index: 30;
+  z-index: 200;
 }
 
 /* Frosted look without live backdrop-filter (Win 拖窗会闪)；不透明窗用实色面板即可 */

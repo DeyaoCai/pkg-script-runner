@@ -1,7 +1,7 @@
 .empty {
   color: var(--muted);
   padding: 16px 12px;
-  font-size: 13px;
+  font-size: var(--fs-13);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -12,7 +12,7 @@
   overflow: auto;
   padding: 10px 12px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -94,7 +94,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text);
   cursor: pointer;
   user-select: none;
@@ -118,7 +118,7 @@
   padding: 28px 12px;
   text-align: center;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 .ss-history-item {
@@ -167,12 +167,12 @@
 }
 
 .ss-history-time {
-  font-size: 11px;
+  font-size: var(--fs-12);
   color: var(--muted);
 }
 
 .ss-history-text {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
@@ -189,7 +189,7 @@
 
 .ss-history-actions .btn {
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: var(--fs-12);
 }
 
 .modal {
@@ -223,13 +223,13 @@
 }
 
 .modal-title {
-  font-size: 15px;
+  font-size: var(--fs-15);
   font-weight: 650;
   margin-bottom: 10px;
 }
 
 .modal-message {
-  font-size: 13px;
+  font-size: var(--fs-13);
   color: var(--muted);
   line-height: 1.55;
   white-space: pre-wrap;
