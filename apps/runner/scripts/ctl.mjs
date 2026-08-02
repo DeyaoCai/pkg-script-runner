@@ -13,16 +13,19 @@ import os from 'node:os';
 import path from 'node:path';
 
 function userDataDir() {
-  if (process.platform === 'win32') {
-    const base =
-      process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-    return path.join(base, 'pkg-runner');
+  const profile = (process.env.PKG_RUNNER_PROFILE || '').trim();
+  const home =
+    process.platform === 'win32'
+      ? process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+      : process.platform === 'darwin'
+        ? path.join(os.homedir(), 'Library', 'Application Support')
+        : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  if (profile) return path.join(home, profile);
+  for (const name of ['pkg-runner', 'pkg-runner-dev']) {
+    const dir = path.join(home, name);
+    if (fs.existsSync(path.join(dir, 'control', 'http.json'))) return dir;
   }
-  if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'pkg-runner');
-  }
-  const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
-  return path.join(base, 'pkg-runner');
+  return path.join(home, 'pkg-runner');
 }
 
 function usage(code = 1) {
@@ -31,7 +34,7 @@ function usage(code = 1) {
   ctl flush-logs
   ctl start|restart|stop <script> [projectDir]
 
-发现文件: %APPDATA%/pkg-runner/control/http.json
+发现文件: %APPDATA%/pkg-runner[/ -dev]/control/http.json（可用 PKG_RUNNER_PROFILE）
 正规通道: HTTP 127.0.0.1 + Bearer token（见该文件）
 `);
   process.exit(code);

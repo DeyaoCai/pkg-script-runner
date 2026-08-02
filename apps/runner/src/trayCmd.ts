@@ -7,11 +7,11 @@ import path from 'node:path';
 import { app } from 'electron';
 
 export function trayCmdPath(): string {
-  return path.join(app.getPath('appData'), 'pkg-runner', 'tray-cmd.json');
+  return path.join(app.getPath('userData'), 'tray-cmd.json');
 }
 
 export function trayCmdReplyPath(): string {
-  return path.join(app.getPath('appData'), 'pkg-runner', 'tray-cmd-reply.json');
+  return path.join(app.getPath('userData'), 'tray-cmd-reply.json');
 }
 
 export type TrayCmd =

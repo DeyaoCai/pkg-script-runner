@@ -1,5 +1,5 @@
 /**
- * Shared diagnostic log — all processes append to %APPDATA%/pkg-runner/diag.log
+ * Diagnostic log — under current userData profile.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import { app } from 'electron';
 const MAX_BYTES = 512 * 1024;
 
 export function diagLogPath(): string {
-  return path.join(app.getPath('appData'), 'pkg-runner', 'diag.log');
+  return path.join(app.getPath('userData'), 'diag.log');
 }
 
 function trimDiagLog(file: string): void {

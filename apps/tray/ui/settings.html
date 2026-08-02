@@ -159,6 +159,10 @@
     </label>
 
     <div class="sec">热键</div>
+    <label class="check">
+      <input type="checkbox" id="hotkeysEnabled" />
+      <span>启用全局热键</span>
+    </label>
     <div class="row">
       <label class="field">截屏</label>
       <button type="button" class="btn grow" id="shotHotkeyBtn">加载中…</button>
@@ -272,6 +276,7 @@
           shellMosaicCols: Number(document.getElementById('shellMosaicCols').value),
           shellLayout: document.getElementById('shellLayout').value,
           persistLogs: document.getElementById('persistLogs').checked,
+          hotkeysEnabled: document.getElementById('hotkeysEnabled').checked,
         };
       }
 
@@ -307,6 +312,7 @@
         document.getElementById('shellMosaicCols').value = String(s.shellMosaicCols ?? 2);
         document.getElementById('shellLayout').value = s.shellLayout || 'grid';
         document.getElementById('persistLogs').checked = !!s.persistLogs;
+        document.getElementById('hotkeysEnabled').checked = s.hotkeysEnabled !== false;
         setStatus('', false);
       }
       window.__applyTraySettings = applySettings;

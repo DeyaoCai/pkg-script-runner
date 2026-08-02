@@ -4,6 +4,7 @@ export type SharedSettings = {
   screenshotHotkey: string;
   activateHotkey: string;
   editorHotkey: string;
+  hotkeysEnabled: boolean;
   screenshotHistoryLimit: number;
   fontId: string;
   glassAlpha: number;

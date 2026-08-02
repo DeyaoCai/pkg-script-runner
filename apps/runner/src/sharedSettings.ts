@@ -8,6 +8,7 @@ export type SharedSettings = {
   screenshotHotkey: string;
   activateHotkey: string;
   editorHotkey: string;
+  hotkeysEnabled: boolean;
   screenshotHistoryLimit: number;
   fontId: string;
   glassAlpha: number;
@@ -22,6 +23,7 @@ export const defaultSharedSettings = (): SharedSettings => ({
   screenshotHotkey: '',
   activateHotkey: '',
   editorHotkey: '',
+  hotkeysEnabled: true,
   screenshotHistoryLimit: 10,
   fontId: 'jetbrains',
   glassAlpha: 55,
@@ -40,6 +42,7 @@ export function coerceSharedSettings(raw: unknown): SharedSettings | null {
     screenshotHotkey: typeof p.screenshotHotkey === 'string' ? p.screenshotHotkey : '',
     activateHotkey: typeof p.activateHotkey === 'string' ? p.activateHotkey : '',
     editorHotkey: typeof p.editorHotkey === 'string' ? p.editorHotkey : '',
+    hotkeysEnabled: typeof p.hotkeysEnabled === 'boolean' ? p.hotkeysEnabled : true,
     screenshotHistoryLimit: clamp(Number(p.screenshotHistoryLimit) || 10, 1, 100),
     fontId: typeof p.fontId === 'string' && p.fontId.trim() ? p.fontId.trim() : 'jetbrains',
     glassAlpha: clamp(Number(p.glassAlpha) || 55, 10, 100),

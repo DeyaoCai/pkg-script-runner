@@ -67,6 +67,7 @@ import {
   destroyCompositorKeepalive,
   ensureCompositorKeepalive,
 } from './compositorKeepalive.js';
+import { applyPkgRunnerUserData, pkgRunnerProfileName } from '../../runner/src/appProfile.js';
 
 function toggleEditor(): void {
   toggleEditorWindow();
@@ -81,11 +82,7 @@ const APP_ROOT = path.resolve(__dirname, '..');
 const TRAY_ICON = path.join(APP_ROOT, 'assets', 'tray.png');
 
 app.setName('pkg-runner');
-try {
-  app.setPath('userData', path.join(app.getPath('appData'), 'pkg-runner'));
-} catch {
-  /* ignore */
-}
+const profileRoot = applyPkgRunnerUserData();
 
 // 尽早设置，避免 runnerHost / editorHost 解析不到 resources 下的 UI
 if (app.isPackaged) {
@@ -102,10 +99,12 @@ registerScreenshotScheme();
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   diagLog('tray', 'single-instance.blocked', {
-    note: '已有 pkg-runner 实例在运行；请先关闭托盘/Electron 再 dev:tray',
+    profile: pkgRunnerProfileName(),
+    userData: profileRoot,
+    note: '同 profile 已有实例；开发与安装版默认分 profile，可并存',
   });
   console.warn(
-    '[pkg-runner] 已有实例在运行（单实例锁），本进程退出。请先关闭旧托盘/Electron 后再启动。',
+    `[pkg-runner] 同 profile（${pkgRunnerProfileName()}）已有实例在运行，本进程退出。`,
   );
   app.quit();
 }
@@ -277,8 +276,23 @@ function registerEditorShortcut() {
   return { ok: true, error: null as string | null };
 }
 
+function clearRegisteredShortcuts() {
+  unregisterAccel(registeredScreenshotHotkey);
+  registeredScreenshotHotkey = '';
+  unregisterAccel(registeredActivateHotkey);
+  registeredActivateHotkey = '';
+  unregisterAccel(registeredEditorHotkey);
+  registeredEditorHotkey = '';
+  try {
+    globalShortcut.unregisterAll();
+  } catch {
+    /* ignore */
+  }
+}
+
 function registerAllShortcuts() {
-  if (hotkeysSuspended) {
+  if (hotkeysSuspended || !prefs.hotkeysEnabled) {
+    clearRegisteredShortcuts();
     return {
       ok: true,
       screenshotError: null as string | null,
@@ -299,17 +313,7 @@ function registerAllShortcuts() {
 
 function suspendHotkeys() {
   hotkeysSuspended = true;
-  unregisterAccel(registeredScreenshotHotkey);
-  registeredScreenshotHotkey = '';
-  unregisterAccel(registeredActivateHotkey);
-  registeredActivateHotkey = '';
-  unregisterAccel(registeredEditorHotkey);
-  registeredEditorHotkey = '';
-  try {
-    globalShortcut.unregisterAll();
-  } catch {
-    /* ignore */
-  }
+  clearRegisteredShortcuts();
 }
 
 function resumeHotkeys() {
@@ -387,6 +391,9 @@ function applySettingsPatch(patch: Partial<SharedSettings>): {
   }
   if (typeof patch.alwaysOnTop === 'boolean') prefs.alwaysOnTop = patch.alwaysOnTop;
   if (typeof patch.persistLogs === 'boolean') prefs.persistLogs = patch.persistLogs;
+  if (typeof patch.hotkeysEnabled === 'boolean') {
+    prefs.hotkeysEnabled = patch.hotkeysEnabled;
+  }
 
   savePrefs(prefs);
   const res = registerAllShortcuts();

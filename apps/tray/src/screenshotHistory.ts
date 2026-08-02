@@ -27,8 +27,7 @@ export type ScreenshotHistoryListItem = {
 };
 
 function rootDir(): string {
-  // Keep history under legacy pkg-runner so existing captures remain visible after tray split.
-  return path.join(app.getPath('appData'), 'pkg-runner', 'screenshot-history');
+  return path.join(app.getPath('userData'), 'screenshot-history');
 }
 
 export function getScreenshotHistoryDir(): string {

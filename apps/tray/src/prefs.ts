@@ -26,6 +26,8 @@ export type SharedPrefs = {
   screenshotHotkey: string;
   activateHotkey: string;
   editorHotkey: string;
+  /** Master switch: when false, no global shortcuts are registered. */
+  hotkeysEnabled: boolean;
   screenshotHistoryLimit: number;
   screenshotDrawColor: string;
   fontId: string;
@@ -44,6 +46,7 @@ const DEFAULTS: SharedPrefs = {
   screenshotHotkey: DEFAULT_SCREENSHOT_HOTKEY,
   activateHotkey: DEFAULT_ACTIVATE_HOTKEY,
   editorHotkey: DEFAULT_EDITOR_HOTKEY,
+  hotkeysEnabled: true,
   screenshotHistoryLimit: DEFAULT_SCREENSHOT_HISTORY_LIMIT,
   screenshotDrawColor: DEFAULT_SCREENSHOT_DRAW_COLOR,
   fontId: DEFAULT_FONT_ID,
@@ -56,17 +59,17 @@ const DEFAULTS: SharedPrefs = {
   migratedFromRunner: false,
 };
 
-/** Stable path under %APPDATA%/pkg-runner — only tray reads/writes this file. */
+/** Profile-scoped paths under userData (prod: pkg-runner, dev: pkg-runner-dev). */
 export function sharedSettingsPath(): string {
-  return path.join(app.getPath('appData'), 'pkg-runner', 'shared-settings.json');
+  return path.join(app.getPath('userData'), 'shared-settings.json');
 }
 
 export function trayCmdPath(): string {
-  return path.join(app.getPath('appData'), 'pkg-runner', 'tray-cmd.json');
+  return path.join(app.getPath('userData'), 'tray-cmd.json');
 }
 
 export function trayCmdReplyPath(): string {
-  return path.join(app.getPath('appData'), 'pkg-runner', 'tray-cmd-reply.json');
+  return path.join(app.getPath('userData'), 'tray-cmd-reply.json');
 }
 
 function legacyRunnerPrefsPath(): string {
@@ -131,6 +134,7 @@ export function settingsFromPrefs(prefs: SharedPrefs): SharedSettings {
     screenshotHotkey: prefs.screenshotHotkey,
     activateHotkey: prefs.activateHotkey,
     editorHotkey: prefs.editorHotkey,
+    hotkeysEnabled: prefs.hotkeysEnabled,
     screenshotHistoryLimit: prefs.screenshotHistoryLimit,
     fontId: prefs.fontId,
     glassAlpha: prefs.glassAlpha,
@@ -149,6 +153,8 @@ function coerce(parsed: Record<string, unknown>, migrated: boolean): SharedPrefs
     activateHotkey:
       'activateHotkey' in parsed ? normalizeHotkey(parsed.activateHotkey) : '',
     editorHotkey: 'editorHotkey' in parsed ? normalizeHotkey(parsed.editorHotkey) : '',
+    hotkeysEnabled:
+      typeof parsed.hotkeysEnabled === 'boolean' ? parsed.hotkeysEnabled : true,
     screenshotHistoryLimit:
       'screenshotHistoryLimit' in parsed
         ? normalizeScreenshotHistoryLimit(parsed.screenshotHistoryLimit)

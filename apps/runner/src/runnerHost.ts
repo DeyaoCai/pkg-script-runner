@@ -82,7 +82,7 @@ function uiDistIndex(): string {
 }
 
 /** Vite UI 开发服（@pkg-runner/web），可用 PKG_RUNNER_UI_URL 覆盖 */
-const UI_DEV_URL = process.env.PKG_RUNNER_UI_URL?.trim() || 'http://127.0.0.1:5175';
+const UI_DEV_URL = process.env.PKG_RUNNER_UI_URL?.trim() || 'http://127.0.0.1:5200';
 
 function panelPreload(): string {
   const dir = runnerDistDir();
@@ -769,7 +769,7 @@ export function applyRunnerSettings(raw: unknown): void {
 }
 
 export function runnerToggleSignalPath(): string {
-  return path.join(app.getPath('appData'), 'pkg-runner', 'runner-toggle.signal');
+  return path.join(app.getPath('userData'), 'runner-toggle.signal');
 }
 
 function consumeToggleSignal(): boolean {
@@ -1482,7 +1482,7 @@ export async function startRunnerHost(opts: RunnerHostOptions = {}): Promise<voi
       stopControlServer = null;
     };
     appendSystemLog(
-      `\n[控制面] ${srv.info.baseUrl}（token 见 %APPDATA%/pkg-runner/control/http.json）\n`,
+      `\n[控制面] ${srv.info.baseUrl}（token 见 userData/control/http.json）\n`,
     );
     diagLog('runner', 'control.ready', { baseUrl: srv.info.baseUrl, log: diagLogPath() });
     await waitForTraySettings(hostMode === 'embedded' ? 0 : 2400);

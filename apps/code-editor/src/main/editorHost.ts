@@ -190,7 +190,7 @@ function navSnapshot() {
 
 function editorDiag(event: string, detail?: unknown): void {
   try {
-    const file = path.join(app.getPath('appData'), 'pkg-runner', 'diag.log');
+    const file = path.join(app.getPath('userData'), 'diag.log');
     const line =
       JSON.stringify({
         t: new Date().toISOString(),

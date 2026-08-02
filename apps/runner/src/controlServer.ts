@@ -1,7 +1,7 @@
 /**
  * 本机控制面（对外正规通道）：127.0.0.1 HTTP + userData 下的 endpoint 发现文件。
  *
- * 发现：%APPDATA%/pkg-runner/control/http.json
+ * 发现：%APPDATA%/<profile>/control/http.json（prod: pkg-runner，dev: pkg-runner-dev）
  *   { host, port, token, baseUrl, pid }
  *
  * API（均需 Header: Authorization: Bearer <token>，除 GET /health）：
