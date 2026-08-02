@@ -1,8 +1,14 @@
 /**
- * Dev: Runner Vite (:5200) + Editor Vite (:5201) + unified tray Electron.
- * Both UIs load via loadURL (HMR); packaged still uses loadFile(dist).
+ * Dev: 默认轻量启动（dist-ui，不起 Vite），避免双 Vite + 多窗预热卡主机。
+ *
+ * HMR（显式）：
+ *   pnpm dev -- --hmr
+ *   或 PKG_RUNNER_UI_DEV=1
+ *
+ * 可选：PKG_RUNNER_DEV_KILL=1 启动前清旧 electron（会跑 CIM，可能顿一下）
  */
 import { spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
@@ -10,16 +16,23 @@ import http from 'node:http';
 const trayRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.join(trayRoot, '..', '..');
 const runnerRoot = path.join(repoRoot, 'apps', 'runner');
+const editorRoot = path.join(repoRoot, 'apps', 'code-editor');
 const UI_URL = process.env.PKG_RUNNER_UI_URL?.trim() || 'http://127.0.0.1:5200';
 const EDITOR_URL =
   process.env.CODE_EDITOR_DEV_URL?.trim() || 'http://127.0.0.1:5201';
 
+const argv = process.argv.slice(2);
+const wantHmr =
+  argv.includes('--hmr') ||
+  process.env.PKG_RUNNER_UI_DEV === '1' ||
+  process.env.PKG_RUNNER_UI_DEV === 'true';
+
 function killStalePkgRunnerElectron() {
+  // 默认跳过：Get-CimInstance 扫全机 electron 会明显卡主机
+  if (process.env.PKG_RUNNER_DEV_KILL !== '1') return 0;
   if (process.env.PKG_RUNNER_DEV_NO_KILL === '1') return 0;
   const repoMarker = path.normalize(repoRoot).toLowerCase();
-  const editorMarker = path
-    .normalize(path.join(repoRoot, 'apps', 'code-editor'))
-    .toLowerCase();
+  const editorMarker = path.normalize(editorRoot).toLowerCase();
   let killed = 0;
 
   if (process.platform === 'win32') {
@@ -54,7 +67,6 @@ function killStalePkgRunnerElectron() {
       const isEditor =
         cmd.includes(editorMarker) ||
         (cmd.includes('user-data-dir=') && cmd.includes('code-editor'));
-      // 不杀安装版（userData=pkg-runner 且无仓库路径）
       if (!isPkgRunner && !isEditor) continue;
       try {
         process.kill(pid);
@@ -143,6 +155,18 @@ function run(cwd, cmd, args, env = process.env) {
   });
 }
 
+function runSync(cwd, cmd, args) {
+  const r = spawnSync(cmd, args, {
+    cwd,
+    stdio: 'inherit',
+    shell: true,
+    env: process.env,
+  });
+  if (r.status !== 0) {
+    throw new Error(`${cmd} ${args.join(' ')} exit ${r.status}`);
+  }
+}
+
 /**
  * @param {string} url
  * @param {string} filterPkg
@@ -164,12 +188,42 @@ async function ensureVite(url, filterPkg, label) {
   return { proc, started: true };
 }
 
-const runnerVite = await ensureVite(UI_URL, '@pkg-runner/web', 'runner');
-const editorVite = await ensureVite(
-  EDITOR_URL,
-  '@pkg-runner/code-editor',
-  'editor',
-);
+function ensureStaticUi() {
+  const runnerUi = path.join(runnerRoot, 'dist-ui', 'index.html');
+  if (!fs.existsSync(runnerUi)) {
+    console.log('[dev] building runner dist-ui (once, no Vite)…');
+    runSync(repoRoot, 'pnpm', ['--filter', '@pkg-runner/runner', 'build:ui']);
+  }
+  const editorUi = path.join(editorRoot, 'dist', 'renderer', 'index.html');
+  if (!fs.existsSync(editorUi)) {
+    console.log('[dev] building editor renderer (once, no Vite)…');
+    runSync(repoRoot, 'pnpm', [
+      '--filter',
+      '@pkg-runner/code-editor',
+      'build:renderer',
+    ]);
+  }
+}
+
+/** @type {{ proc: import('node:child_process').ChildProcess | null, started: boolean }} */
+let runnerVite = { proc: null, started: false };
+/** @type {{ proc: import('node:child_process').ChildProcess | null, started: boolean }} */
+let editorVite = { proc: null, started: false };
+
+if (wantHmr) {
+  console.log('[dev] HMR mode — starting Vite (may spike CPU)');
+  runnerVite = await ensureVite(UI_URL, '@pkg-runner/web', 'runner');
+  editorVite = await ensureVite(
+    EDITOR_URL,
+    '@pkg-runner/code-editor',
+    'editor',
+  );
+} else {
+  console.log(
+    '[dev] light mode — dist-ui, no Vite (use --hmr or PKG_RUNNER_UI_DEV=1 for HMR)',
+  );
+  ensureStaticUi();
+}
 
 const build = run(trayRoot, 'pnpm', ['run', 'build:dev']);
 await new Promise((resolve, reject) => {
@@ -180,13 +234,34 @@ await new Promise((resolve, reject) => {
   );
 });
 
+// 开发默认 test；要正式色：PKG_RUNNER_COLOR_FORCE=1 PKG_RUNNER_COLOR_ENV=prod
+const wantProdColor =
+  process.env.PKG_RUNNER_COLOR_FORCE === '1' &&
+  process.env.PKG_RUNNER_COLOR_ENV?.trim().toLowerCase() === 'prod';
+const colorEnv = wantProdColor ? 'prod' : 'test';
+
 const electronEnv = {
   ...process.env,
   PKG_RUNNER_APP_DIR: runnerRoot,
-  PKG_RUNNER_UI_URL: UI_URL,
-  PKG_EDITOR_APP_DIR: path.join(repoRoot, 'apps', 'code-editor'),
-  CODE_EDITOR_DEV_URL: EDITOR_URL,
+  PKG_EDITOR_APP_DIR: editorRoot,
+  PKG_RUNNER_COLOR_ENV: colorEnv,
+  PKG_RUNNER_COLOR_FORCE: wantProdColor ? '1' : '0',
+  // 默认不注入 Vite URL → loadMainWindow 走 dist-ui
+  ...(wantHmr
+    ? {
+        PKG_RUNNER_UI_URL: UI_URL,
+        CODE_EDITOR_DEV_URL: EDITOR_URL,
+        PKG_RUNNER_UI_DEV: '1',
+      }
+    : {
+        // 清掉外部环境里残留的 Vite 指向，避免误走 5200
+        PKG_RUNNER_UI_URL: '',
+        CODE_EDITOR_DEV_URL: '',
+        VITE_DEV_SERVER_URL: '',
+        PKG_RUNNER_UI_DEV: '0',
+      }),
 };
+console.log(`[dev] color env: ${colorEnv}`);
 
 const staleKilled = killStalePkgRunnerElectron();
 if (staleKilled > 0) {
@@ -227,7 +302,7 @@ electron.on('exit', (code) => {
       '[dev] 请关闭系统托盘里的旧图标，或在任务管理器结束 electron.exe',
     );
     console.error(
-      '[dev] 也可设置 PKG_RUNNER_DEV_NO_KILL=1 跳过自动清理后手动排查\n',
+      '[dev] 清旧进程（可能顿一下）：PKG_RUNNER_DEV_KILL=1 pnpm --filter @pkg-runner/tray dev\n',
     );
   }
   process.exit(code ?? 0);

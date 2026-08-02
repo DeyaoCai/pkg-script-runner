@@ -23,8 +23,6 @@ import {
 } from './fsBridge.js';
 import { gitStatus, gitDiff } from './gitBridge.js';
 import {
-  loadPrefs,
-  savePrefs,
   setWorkspace,
   openIncomingDir,
   enterDir,
@@ -43,6 +41,11 @@ import {
   type TPrefs,
   type TShellPrefs,
 } from './prefs.js';
+import {
+  onWorkspacePrefsChange,
+  readWorkspacePrefs,
+  writeWorkspacePrefs,
+} from '../../../shared/workspaceSync.js';
 import { TermBridge } from './termBridge.js';
 
 export type EditorHostMode = 'standalone' | 'embedded';
@@ -98,11 +101,6 @@ function rendererIndex(): string {
   return path.join(editorAppRoot(), 'dist', 'renderer', 'index.html');
 }
 
-/** Keep editor prefs under %APPDATA%/code-editor even when embedded in tray. */
-function prefsPath(): string {
-  return path.join(app.getPath('appData'), 'code-editor', 'prefs.json');
-}
-
 /** 软隐藏：屏外 + opacity 1（opacity 0 不参与 Win DWM，无法稳住其它无边框窗拖动） */
 const PARK_ORIGIN = { x: -12000, y: -12000 } as const;
 
@@ -126,9 +124,17 @@ let prefs: TPrefs = {
 };
 let initialOpenDir: string | null = null;
 const termBridge = new TermBridge(() => mainWindow);
+let unsubWorkspace: (() => void) | null = null;
+/** True while this host is writing prefs — skip re-broadcast to own renderer. */
+let persistingLocal = false;
 
 function persist(): void {
-  savePrefs(prefsPath(), prefs);
+  persistingLocal = true;
+  try {
+    writeWorkspacePrefs(prefs);
+  } finally {
+    persistingLocal = false;
+  }
 }
 
 function activeRoot(): string {
@@ -279,6 +285,17 @@ function isEditorVisuallyOpen(): boolean {
   return mainWindow.isVisible();
 }
 
+/** 始终显示（设置页「打开」等，不切换隐藏） */
+export function showEditorWindow(): void {
+  startHidden = false;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  editorDiag('window.show', { soft: true, mode: hostMode, force: true });
+  showWindow();
+}
+
 /** 显示 ↔ 隐藏（托盘热键 / 同进程直接调用） */
 export function toggleEditorWindow(): void {
   startHidden = false;
@@ -329,13 +346,22 @@ function createWindow(): void {
     mode: hostMode,
   });
 
+  const colorEnv =
+    process.env.PKG_RUNNER_COLOR_ENV?.trim().toLowerCase() === 'test'
+      ? 'test'
+      : 'prod';
+  const iconTest = path.join(editorAppRoot(), 'assets', 'icon-test.png');
+  const iconProd = path.join(editorAppRoot(), 'assets', 'icon.png');
+  const appIcon =
+    colorEnv === 'test' && fs.existsSync(iconTest) ? iconTest : iconProd;
   mainWindow = new BrowserWindow(
     framelessWindowOptions({
       width: 1280,
       height: 840,
       minWidth: 900,
       minHeight: 560,
-      title: 'Code Editor',
+      title: colorEnv === 'test' ? 'Code Editor · 测试' : 'Code Editor',
+      icon: appIcon,
       show: false,
       webPreferences: {
         preload,
@@ -649,7 +675,15 @@ export async function startEditorHost(
   hostMode = opts.mode ?? 'standalone';
   startHidden = !!opts.startHidden;
 
-  prefs = loadPrefs(prefsPath());
+  prefs = readWorkspacePrefs();
+  unsubWorkspace?.();
+  unsubWorkspace = onWorkspacePrefsChange((next) => {
+    prefs = next;
+    if (persistingLocal) return;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('nav:external-open', navSnapshot());
+    }
+  });
 
   const openDir =
     opts.openDir?.trim() ||

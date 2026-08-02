@@ -9,14 +9,25 @@ export type SharedSettings = {
   fontId: string;
   glassAlpha: number;
   theme: 'dark' | 'light';
+  brandTone: 'prod' | 'test';
+  brandColor: string;
   shellMosaicCols: number;
   shellLayout: 'grid' | 'single';
   alwaysOnTop: boolean;
   persistLogs: boolean;
 };
 
+export type TrayProfileInfo = {
+  profile: string;
+  colorEnv: 'prod' | 'test';
+  userData: string;
+  settingsPath: string;
+  packaged: boolean;
+};
+
 const api = {
   getSettings: (): Promise<SharedSettings> => ipcRenderer.invoke('tray:get-settings'),
+  getProfile: (): Promise<TrayProfileInfo> => ipcRenderer.invoke('tray:get-profile'),
   setSettings: (
     patch: Partial<SharedSettings>,
   ): Promise<{
@@ -66,6 +77,10 @@ const api = {
     error: string | null;
   }> => ipcRenderer.invoke('pkg:open-ss-history-dir'),
   closeWindow: (): Promise<void> => ipcRenderer.invoke('tray:window-close'),
+  showRunner: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('tray:show-runner'),
+  showEditor: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('tray:show-editor'),
   diagLog: (event: string, detail?: unknown): Promise<void> =>
     ipcRenderer.invoke('tray:diag-log', event, detail),
   openDiagLog: (): Promise<string> => ipcRenderer.invoke('tray:open-diag-log'),

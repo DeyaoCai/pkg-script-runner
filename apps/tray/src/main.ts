@@ -23,6 +23,8 @@ import {
   normalizeShellMosaicCols,
   normalizeShellLayout,
   normalizeTheme,
+  normalizeBrandColor,
+  brandColorForTone,
   normalizeFontId,
   trayCmdPath,
   trayCmdReplyPath,
@@ -46,6 +48,7 @@ import {
   ensureScreenshotHistoryDir,
 } from './screenshotHistory.js';
 import {
+  showEditorWindow,
   shutdownEditorHost,
   startEditorHost,
   toggleEditorWindow,
@@ -53,6 +56,7 @@ import {
 } from '../../code-editor/src/main/editorHost.js';
 import {
   applyRunnerSettings,
+  showRunnerWindow,
   shutdownRunnerHost,
   startRunnerHost,
   toggleRunnerWindow,
@@ -67,22 +71,98 @@ import {
   destroyCompositorKeepalive,
   ensureCompositorKeepalive,
 } from './compositorKeepalive.js';
-import { applyPkgRunnerUserData, pkgRunnerProfileName } from '../../runner/src/appProfile.js';
+import {
+  applyPkgRunnerUserData,
+  pkgRunnerColorEnv,
+  pkgRunnerProfileName,
+} from '../../runner/src/appProfile.js';
+import { resolveEnvAssetPath } from '../../runner/src/appIcons.js';
 
 function toggleEditor(): void {
   toggleEditorWindow();
 }
 
 function toggleRunner(): void {
+  // 首次开 Runner 再挂 DWM keepalive，避免启动期多一扇窗抢合成
+  ensureCompositorKeepalive();
   toggleRunnerWindow();
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '..');
-const TRAY_ICON = path.join(APP_ROOT, 'assets', 'tray.png');
 
 app.setName('pkg-runner');
 const profileRoot = applyPkgRunnerUserData();
+
+/** 运行环境色板（icon / data-env）；与设置里的主图强调色正交 */
+function activeBrandTone(): 'prod' | 'test' {
+  return pkgRunnerColorEnv();
+}
+
+function syncBrandEnvFromPrefs(): void {
+  // 不再用 prefs.brandTone / brandColor 覆盖 COLOR_ENV
+  if (prefs) prefs.brandTone = activeBrandTone();
+}
+
+/** 任务栏 / 标题栏用较大 icon；托盘用 tray* */
+function resolveAppIconPath(): string {
+  return resolveEnvAssetPath(APP_ROOT, 'icon');
+}
+
+function resolveTrayIconPath(): string {
+  // Win 托盘缩到 16px：用较大的 icon-* 比 tray-* 更易辨认棕/蓝
+  const kind = process.platform === 'win32' ? 'icon' : 'tray';
+  const p = resolveEnvAssetPath(APP_ROOT, kind);
+  if (activeBrandTone() === 'test' && !/-test\.png$/i.test(path.basename(p))) {
+    diagLog('tray', 'icon.missing-test', {
+      tried: path.join(APP_ROOT, 'assets', `${kind}-test.png`),
+    });
+  }
+  return p;
+}
+
+function trayEnvLabel(): string {
+  return activeBrandTone() === 'test' ? '测试' : '正式';
+}
+
+function applyBrandIcons(): void {
+  syncBrandEnvFromPrefs();
+  if (tray) {
+    const trayIconPath = resolveTrayIconPath();
+    let icon = nativeImage.createFromPath(trayIconPath);
+    if (icon.isEmpty()) {
+      icon = nativeImage.createEmpty();
+    } else if (process.platform === 'win32') {
+      icon = icon.resize({ width: 16, height: 16 });
+    }
+    try {
+      tray.setImage(icon);
+    } catch {
+      /* ignore */
+    }
+    diagLog('tray', 'icon.apply', {
+      env: activeBrandTone(),
+      file: path.basename(trayIconPath),
+    });
+  }
+  const appIcon = resolveAppIconPath();
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    try {
+      win.setIcon(appIcon);
+    } catch {
+      /* ignore */
+    }
+  }
+  updateTrayMenu();
+}
+
+/** Win 任务栏分组：dev/test 与正式分开，避免吃到安装包快捷方式的缓存图标 */
+if (process.platform === 'win32') {
+  app.setAppUserModelId(
+    pkgRunnerColorEnv() === 'test' ? 'com.pkg.runner.dev' : 'com.pkg.runner',
+  );
+}
 
 // 尽早设置，避免 runnerHost / editorHost 解析不到 resources 下的 UI
 if (app.isPackaged) {
@@ -110,6 +190,7 @@ if (!gotLock) {
 }
 
 let prefs: SharedPrefs = loadPrefs();
+syncBrandEnvFromPrefs();
 let tray: Tray | null = null;
 let settingsWin: BrowserWindow | null = null;
 let historyWin: BrowserWindow | null = null;
@@ -123,6 +204,65 @@ let stopSharedWatch: (() => void) | null = null;
 let appReady = false;
 let pendingOpenSettings = false;
 let warmHeavyTimer: ReturnType<typeof setTimeout> | null = null;
+/** 错峰预热的后续 timer，退出时一并清 */
+const warmChainTimers = new Set<ReturnType<typeof setTimeout>>();
+
+function scheduleIdleWarms(): void {
+  // 启动后很久再暖，且一次只开一扇窗，避免和 hosts 初始化叠峰
+  const gapMs = 8000;
+  const stepMs = 6000;
+  const chain: Array<{ name: string; run: () => void }> = [
+    {
+      name: 'runner',
+      run: () => {
+        try {
+          warmRunnerWindow();
+        } catch (err) {
+          diagLog('tray:runner', 'warm.error', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      },
+    },
+    {
+      name: 'editor',
+      run: () => {
+        try {
+          warmEditorWindow();
+        } catch (err) {
+          diagLog('tray:editor', 'warm.error', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      },
+    },
+    {
+      name: 'screenshot',
+      run: () => {
+        try {
+          warmScreenshotWindow({
+            appRoot: APP_ROOT,
+            preloadPath: path.join(__dirname, 'screenshot-preload.cjs'),
+          });
+        } catch (err) {
+          diagLog('tray', 'warm.screenshot.error', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      },
+    },
+  ];
+  diagLog('tray', 'warm.schedule', { gapMs, stepMs, n: chain.length });
+  chain.forEach((step, i) => {
+    const t = setTimeout(() => {
+      warmChainTimers.delete(t);
+      if (isQuitting) return;
+      diagLog('tray', 'warm.step', { name: step.name });
+      step.run();
+    }, gapMs + i * stepMs);
+    warmChainTimers.add(t);
+  });
+}
 
 function destroyAuxWindows(): void {
   for (const win of [settingsWin, historyWin]) {
@@ -155,6 +295,8 @@ function stopTrayWatchers(): void {
     clearTimeout(warmHeavyTimer);
     warmHeavyTimer = null;
   }
+  for (const t of warmChainTimers) clearTimeout(t);
+  warmChainTimers.clear();
 }
 
 /** 退出兜底：清掉所有 BrowserWindow，再强制退出（避免软隐藏窗拖住进程树） */
@@ -382,7 +524,17 @@ function applySettingsPatch(patch: Partial<SharedSettings>): {
   }
   if (typeof patch.fontId === 'string') prefs.fontId = normalizeFontId(patch.fontId);
   if (patch.glassAlpha != null) prefs.glassAlpha = normalizeGlassAlpha(patch.glassAlpha);
+  const prevTheme = prefs.theme;
   if (patch.theme != null) prefs.theme = normalizeTheme(patch.theme);
+  if (patch.brandColor != null) {
+    const nextColor = normalizeBrandColor(
+      patch.brandColor,
+      prefs.brandColor || brandColorForTone(activeBrandTone()),
+    );
+    prefs.brandColor = nextColor;
+  }
+  // brandTone 始终跟运行环境；忽略 patch 里的 brandTone / 颜色推算
+  prefs.brandTone = activeBrandTone();
   if (patch.shellMosaicCols != null) {
     prefs.shellMosaicCols = normalizeShellMosaicCols(patch.shellMosaicCols);
   }
@@ -408,6 +560,23 @@ function applySettingsPatch(patch: Partial<SharedSettings>): {
   }
   updateTrayMenu();
   publishSettings();
+  if (
+    prefs.theme !== prevTheme &&
+    settingsWin &&
+    !settingsWin.isDestroyed()
+  ) {
+    const isTest = activeBrandTone() === 'test';
+    const light = prefs.theme === 'light';
+    settingsWin.setBackgroundColor(
+      light
+        ? isTest
+          ? '#f7f0ea'
+          : '#f3f4f6'
+        : isTest
+          ? '#241208'
+          : '#1a1d23',
+    );
+  }
   return { settings: settingsFromPrefs(prefs), hotkeyError };
 }
 
@@ -434,11 +603,25 @@ function reloadPrefsFromDisk(): SharedSettings {
   return settingsFromPrefs(prefs);
 }
 
+function profileInfo() {
+  return {
+    profile: pkgRunnerProfileName(),
+    colorEnv: activeBrandTone(),
+    userData: profileRoot,
+    settingsPath: sharedSettingsPath(),
+    packaged: app.isPackaged,
+  };
+}
+
 function deliverSettingsToWindow(win: BrowserWindow, settings: SharedSettings): void {
   sendTo(win, 'tray:settings', settings);
   const payload = JSON.stringify(settings);
+  const profile = JSON.stringify(profileInfo());
   void win.webContents
-    .executeJavaScript(`window.__applyTraySettings?.(${payload})`, true)
+    .executeJavaScript(
+      `window.__applyTraySettings?.(${payload}); window.__applyTrayProfile?.(${profile});`,
+      true,
+    )
     .catch((err) => {
       diagLog('tray', 'settings.inject-fail', {
         error: err instanceof Error ? err.message : String(err),
@@ -464,10 +647,24 @@ function openSettingsWindow() {
     pushSettingsToWindow(settingsWin);
     return;
   }
+  const isTest = activeBrandTone() === 'test';
+  const envLabel = isTest ? '测试' : '正式';
+  const light = prefs.theme === 'light';
+  const chromeBg = light
+    ? isTest
+      ? '#f7f0ea'
+      : '#f3f4f6'
+    : isTest
+      ? '#241208'
+      : '#1a1d23';
+  const appIcon = resolveAppIconPath();
+  // 原生标题栏：显示「设置 · 测试/正式」+ 环境 icon（勿用 hidden overlay，否则顶栏无标题文字）
   settingsWin = new BrowserWindow({
-    width: 480,
-    height: 640,
-    title: '设置',
+    width: 520,
+    height: 700,
+    title: `设置 · ${envLabel}`,
+    icon: appIcon,
+    backgroundColor: chromeBg,
     autoHideMenuBar: true,
     webPreferences: panelWebPreferences(),
   });
@@ -482,6 +679,9 @@ function openSettingsWindow() {
     pushSettingsToWindow(settingsWin);
   });
   settingsWin.webContents.on('did-finish-load', () => {
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      settingsWin.setTitle(`设置 · ${envLabel}`);
+    }
     pushSettingsToWindow(settingsWin);
     void settingsWin!.webContents
       .executeJavaScript('typeof window.trayApi !== "undefined"')
@@ -492,7 +692,9 @@ function openSettingsWindow() {
         diagLog('tray', 'settings.bridge-check', { hasApi: false });
       });
   });
-  void settingsWin.loadFile(path.join(APP_ROOT, 'ui', 'settings.html'));
+  void settingsWin.loadFile(path.join(APP_ROOT, 'ui', 'settings.html'), {
+    query: { env: isTest ? 'test' : 'prod' },
+  });
   settingsWin.on('closed', () => {
     settingsWin = null;
   });
@@ -508,6 +710,7 @@ function openHistoryWindow() {
     width: 720,
     height: 560,
     title: '截屏历史',
+    icon: resolveAppIconPath(),
     autoHideMenuBar: true,
     webPreferences: panelWebPreferences(),
   });
@@ -517,9 +720,22 @@ function openHistoryWindow() {
   });
 }
 
+function updateTrayTooltip(): void {
+  if (!tray) return;
+  const env = trayEnvLabel();
+  tray.setToolTip(`Pkg Runner · ${env} — 单击显示/隐藏 Runner`);
+}
+
 function updateTrayMenu() {
   if (!tray) return;
+  updateTrayTooltip();
+  const env = trayEnvLabel();
   const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: `Pkg Runner · ${env}${app.isPackaged ? '' : '（dev）'}`,
+      enabled: false,
+    },
+    { type: 'separator' },
     {
       label: '设置…',
       click: () => openSettingsWindow(),
@@ -582,14 +798,22 @@ function updateTrayMenu() {
 
 function createTray() {
   if (tray) return;
-  let icon = nativeImage.createFromPath(TRAY_ICON);
+  const trayIconPath = resolveTrayIconPath();
+  let icon = nativeImage.createFromPath(trayIconPath);
+  diagLog('tray', 'icon.resolve', {
+    env: pkgRunnerColorEnv(),
+    file: path.basename(trayIconPath),
+    path: trayIconPath,
+    packaged: app.isPackaged,
+    colorEnvVar: process.env.PKG_RUNNER_COLOR_ENV ?? null,
+    force: process.env.PKG_RUNNER_COLOR_FORCE ?? null,
+  });
   if (icon.isEmpty()) {
     icon = nativeImage.createEmpty();
   } else if (process.platform === 'win32') {
     icon = icon.resize({ width: 16, height: 16 });
   }
   tray = new Tray(icon);
-  tray.setToolTip('Pkg Runner — 单击显示/隐藏 Runner');
   updateTrayMenu();
   tray.on('click', () => toggleRunner());
 }
@@ -664,9 +888,12 @@ function registerIpc() {
     diagLog('tray', 'ipc.get-settings', {
       screenshotHotkey: settings.screenshotHotkey,
       activateHotkey: settings.activateHotkey,
+      profile: pkgRunnerProfileName(),
+      settingsPath: sharedSettingsPath(),
     });
     return settings;
   });
+  ipcMain.handle('tray:get-profile', () => profileInfo());
   ipcMain.handle('tray:set-settings', (_e, patch: Partial<SharedSettings>) => {
     diagLog('tray', 'ipc.set-settings', { patch });
     return applySettingsPatch(patch && typeof patch === 'object' ? patch : {});
@@ -695,6 +922,15 @@ function registerIpc() {
   ipcMain.handle('tray:window-close', (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     win?.close();
+  });
+  ipcMain.handle('tray:show-runner', () => {
+    ensureCompositorKeepalive();
+    showRunnerWindow();
+    return { ok: true as const };
+  });
+  ipcMain.handle('tray:show-editor', () => {
+    showEditorWindow();
+    return { ok: true as const };
   });
   ipcMain.handle('pkg:open-ss-history-dir', () => openScreenshotHistoryDir());
 
@@ -743,14 +979,14 @@ if (gotLock) {
     const t0 = Date.now();
     diagLog('tray', 'app.ready', { prefsPath: sharedSettingsPath() });
     prefs = loadPrefs();
+    syncBrandEnvFromPrefs();
     trimScreenshotHistory(prefs.screenshotHistoryLimit);
     registerIpc();
     // 先挂托盘 + 热键，再起宿主，避免等 UI/控制面才「活过来」
     createTray();
     registerAllShortcuts();
     ensureAppShortcutsOnPackagedLaunch();
-    // Win：立刻挂不透明屏外窗，稳住「只开 Runner」拖动
-    ensureCompositorKeepalive();
+    // compositor keepalive 推迟到首次开 Runner（避免启动多一扇 Chromium 窗掉帧）
     diagLog('tray', 'ui.tray-ready', { ms: Date.now() - t0 });
 
     await startRunnerHost({
@@ -758,40 +994,21 @@ if (gotLock) {
       getSharedSettings: () => settingsFromPrefs(prefs),
     });
     await startEditorHost({ mode: 'embedded' });
-    try {
-      warmEditorWindow();
-    } catch (err) {
-      diagLog('tray:editor', 'warm.error', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+    // 默认不预热 BrowserWindow：Chromium 冷启动 + Vite 会抢 CPU/磁盘卡主机
+    // 需要预热：PKG_RUNNER_WARM=1（错峰单路，不叠三窗）
     publishSettings();
     watchTrayCmd();
     stopSharedWatch = watchSharedSettings(onSharedSettingsChanged);
     diagLog('tray', 'hosts.ready', { ms: Date.now() - t0 });
 
-    // 截屏 / Runner 可延后预热，不堵托盘就绪
-    warmHeavyTimer = setTimeout(() => {
-      warmHeavyTimer = null;
-      if (isQuitting) return;
-      try {
-        warmScreenshotWindow({
-          appRoot: APP_ROOT,
-          preloadPath: path.join(__dirname, 'screenshot-preload.cjs'),
-        });
-      } catch (err) {
-        diagLog('tray', 'warm.screenshot.error', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      try {
-        warmRunnerWindow();
-      } catch (err) {
-        diagLog('tray:runner', 'warm.error', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }, 2500);
+    const wantWarm =
+      process.env.PKG_RUNNER_WARM === '1' ||
+      process.env.PKG_RUNNER_WARM === 'true';
+    if (wantWarm) {
+      scheduleIdleWarms();
+    } else {
+      diagLog('tray', 'warm.skip', { reason: 'default-no-warm-keep-host-calm' });
+    }
 
     if (process.argv.some((a) => a === '--open-settings')) {
       openSettingsWindow();
