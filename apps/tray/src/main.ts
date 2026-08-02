@@ -11,6 +11,7 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { chromeBackground } from '@pkg-runner/tokens';
 import {
   loadPrefs,
   savePrefs,
@@ -647,16 +648,8 @@ function openSettingsWindow() {
     pushSettingsToWindow(settingsWin);
     return;
   }
-  const isTest = activeBrandTone() === 'test';
-  const envLabel = isTest ? '测试' : '正式';
-  const light = prefs.theme === 'light';
-  const chromeBg = light
-    ? isTest
-      ? '#f7f0ea'
-      : '#f3f4f6'
-    : isTest
-      ? '#241208'
-      : '#1a1d23';
+  const envLabel = activeBrandTone() === 'test' ? '测试' : '正式';
+  const chromeBg = chromeBackground(activeBrandTone(), prefs.theme);
   const appIcon = resolveAppIconPath();
   // 原生标题栏：显示「设置 · 测试/正式」+ 环境 icon（勿用 hidden overlay，否则顶栏无标题文字）
   settingsWin = new BrowserWindow({
@@ -693,7 +686,7 @@ function openSettingsWindow() {
       });
   });
   void settingsWin.loadFile(path.join(APP_ROOT, 'ui', 'settings.html'), {
-    query: { env: isTest ? 'test' : 'prod' },
+    query: { env: activeBrandTone() === 'test' ? 'test' : 'prod' },
   });
   settingsWin.on('closed', () => {
     settingsWin = null;

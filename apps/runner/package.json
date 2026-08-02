@@ -2,9 +2,10 @@
   "name": "@pkg-runner/runner",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Pkg Runner — script runner UI · pty · glass",
-  "author": "DS Agent",
+  "author": "DeyaoCai",
   "main": "dist/main.js",
   "files": [
     "dist",
@@ -28,10 +29,11 @@
     "typescript": "^5.5.0"
   },
   "scripts": {
-    "build:main": "node ./scripts/build-main.mjs",
+    "build:tokens": "pnpm --filter @pkg-runner/tokens build",
+    "build:main": "pnpm build:tokens && node ./scripts/build-main.mjs",
     "build:ui": "pnpm --filter @pkg-runner/web build",
     "build": "pnpm build:main && pnpm build:ui",
-    "build:dev": "node ./scripts/build-main.mjs --dev",
+    "build:dev": "pnpm build:tokens && node ./scripts/build-main.mjs --dev",
     "dev:ui": "pnpm --filter @pkg-runner/web dev",
     "dev": "node ./scripts/dev.mjs",
     "start": "electron .",

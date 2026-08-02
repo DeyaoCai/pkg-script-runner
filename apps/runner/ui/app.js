@@ -1,3 +1,7 @@
+/**
+ * Legacy file:// UI (index.vanilla.html). Production uses @pkg-runner/web → dist-ui.
+ * Kept as fallback; prefer Vue TerminalView / AppCtrl for new shell work.
+ */
 /* global from preload */
 const api = window.pkgRunner;
 

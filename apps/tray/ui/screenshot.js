@@ -104,11 +104,18 @@ function setSnapGuides(guides) {
 }
 
 
+function brandFallback() {
+  if (typeof PkgTokens !== 'undefined' && PkgTokens.BRAND_PRESET_PROD) {
+    return PkgTokens.BRAND_PRESET_PROD;
+  }
+  return '#669851';
+}
+
 /** 当前绘制 / 拾色结果 */
 let drawColor =
   (typeof getComputedStyle !== 'undefined' &&
     getComputedStyle(document.documentElement).getPropertyValue('--tone').trim()) ||
-  '#669851';
+  brandFallback();
 /** 离屏图，用于精确取色 */
 let sampleCanvas = null;
 let sampleCtx = null;
@@ -121,7 +128,7 @@ function normalizeHex(hex) {
   }
   return (
     getComputedStyle(document.documentElement).getPropertyValue('--tone').trim() ||
-    '#669851'
+    brandFallback()
   );
 }
 

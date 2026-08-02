@@ -7,14 +7,24 @@
     <script>
       (function () {
         var q = new URLSearchParams(location.search).get('env');
-        var env = q === 'test' ? 'test' : 'prod';
-        document.documentElement.setAttribute('data-env', env);
-        document.title = '设置 · ' + (env === 'test' ? '测试' : '正式');
-        window.__bootEnv = env;
+        window.__bootEnv = q === 'test' ? 'test' : 'prod';
+        document.documentElement.setAttribute('data-env', window.__bootEnv);
       })();
     </script>
     <link rel="stylesheet" href="./tokens.css" />
     <script src="./pkg-tokens.js"></script>
+    <script>
+      (function () {
+        var env = window.__bootEnv === 'test' ? 'test' : 'prod';
+        PkgTokens.bootDocumentTheme({
+          colorEnv: env,
+          theme: 'dark',
+          titleForEnv: function (e) {
+            return '设置 · ' + (e === 'test' ? '测试' : '正式');
+          },
+        });
+      })();
+    </script>
     <style>
       * {
         box-sizing: border-box;
@@ -335,11 +345,10 @@
         </div>
         <div class="row wrap">
           <label class="field" title="主色调种子：铺底由此低饱和派生；点缀用同一色的鲜明形态">主色调</label>
-          <input type="color" id="brandColor" value="#669851" title="拾色器" />
+          <input type="color" id="brandColor" title="拾色器" />
           <input
             type="text"
             id="brandColorHex"
-            value="#669851"
             maxlength="7"
             spellcheck="false"
             title="十六进制颜色"

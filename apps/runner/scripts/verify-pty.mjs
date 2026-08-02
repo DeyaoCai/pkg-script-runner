@@ -1,6 +1,8 @@
 /**
- * Smoke-check PTY + UI assets for pkg-runner interactive shell.
+ * Smoke-check PTY + Vue shell wiring for pkg-runner interactive shell.
  * Does not launch the full Electron window.
+ *
+ * Production UI is @pkg-runner/web (TerminalView); ui/app.js is legacy fallback only.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +10,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const webSrc = path.join(root, '..', 'web', 'src');
 const require = createRequire(import.meta.url);
 let failed = 0;
 
@@ -25,16 +28,53 @@ for (const f of ['xterm.js', 'xterm.css', 'addon-fit.js']) {
   else bad(`missing vendor/${f}`);
 }
 
-const appJs = fs.readFileSync(path.join(root, 'ui', 'app.js'), 'utf8');
-for (const needle of ['attachShellTerm', 'onShellData', 'xterm-host', 'shellWrite', 'focusShellTerm']) {
-  if (appJs.includes(needle)) ok(`app.js has ${needle}`);
-  else bad(`app.js missing ${needle}`);
+const termCtrl = path.join(webSrc, 'components', 'TerminalView', 'TerminalViewCtrl.ts');
+const termVue = path.join(webSrc, 'components', 'TerminalView', 'TerminalView.vue');
+const preload = path.join(root, 'src', 'preload.ts');
+
+if (fs.existsSync(termCtrl)) {
+  const src = fs.readFileSync(termCtrl, 'utf8');
+  for (const needle of ['shellWrite', 'pkg:shell-data', '@xterm/xterm', 'FitAddon']) {
+    if (src.includes(needle)) ok(`TerminalViewCtrl has ${needle}`);
+    else bad(`TerminalViewCtrl missing ${needle}`);
+  }
+} else {
+  bad(`missing ${termCtrl}`);
 }
 
-const mainJs = fs.readFileSync(path.join(root, 'dist', 'main.js'), 'utf8');
-for (const needle of ['node-pty', 'pkg:shell-write', 'pkg:shell-data', 'pkg:shell-resize']) {
-  if (mainJs.includes(needle)) ok(`dist/main has ${needle}`);
-  else bad(`dist/main missing ${needle}`);
+if (fs.existsSync(termVue)) {
+  const src = fs.readFileSync(termVue, 'utf8');
+  if (src.includes('xterm-host')) ok('TerminalView.vue has xterm-host');
+  else bad('TerminalView.vue missing xterm-host');
+} else {
+  bad(`missing ${termVue}`);
+}
+
+if (fs.existsSync(preload)) {
+  const src = fs.readFileSync(preload, 'utf8');
+  for (const needle of [
+    'shellWrite',
+    'onShellData',
+    'pkg:shell-write',
+    'pkg:shell-data',
+    'pkg:shell-resize',
+  ]) {
+    if (src.includes(needle)) ok(`preload has ${needle}`);
+    else bad(`preload missing ${needle}`);
+  }
+} else {
+  bad(`missing ${preload}`);
+}
+
+const mainJs = path.join(root, 'dist', 'main.js');
+if (fs.existsSync(mainJs)) {
+  const src = fs.readFileSync(mainJs, 'utf8');
+  for (const needle of ['node-pty', 'pkg:shell-write', 'pkg:shell-data', 'pkg:shell-resize']) {
+    if (src.includes(needle)) ok(`dist/main has ${needle}`);
+    else bad(`dist/main missing ${needle}`);
+  }
+} else {
+  bad('missing dist/main.js (run pnpm --filter @pkg-runner/runner build:main)');
 }
 
 try {
