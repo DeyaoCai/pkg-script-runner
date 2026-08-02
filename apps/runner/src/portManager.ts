@@ -182,57 +182,78 @@ export async function listListeningPorts(): Promise<ListeningPort[]> {
   }
 }
 
-function parseWmicProcessIds(stdout: string): number[] {
-  const out: number[] = [];
-  for (const m of stdout.matchAll(/ProcessId=(\d+)/g)) {
-    const n = Number(m[1]);
-    if (Number.isFinite(n) && n > 0) out.push(n);
-  }
-  return out;
-}
-
-async function childrenOf(pid: number): Promise<number[]> {
+/** 一次快照：parentPid → children[]（Win: CIM；其它: 逐 root pgrep） */
+async function loadParentChildMap(
+  roots: number[],
+): Promise<Map<number, number[]>> {
+  const map = new Map<number, number[]>();
   if (process.platform === 'win32') {
     try {
       const { stdout } = await runCmd(
-        'wmic',
+        'powershell.exe',
         [
-          'process',
-          'where',
-          `(ParentProcessId=${pid})`,
-          'get',
-          'ProcessId',
-          '/FORMAT:LIST',
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Csv -NoTypeInformation",
         ],
-        { timeoutMs: 5000 },
+        { timeoutMs: 12000 },
       );
-      return parseWmicProcessIds(stdout);
+      for (const line of stdout.split(/\r?\n/).slice(1)) {
+        const m = /^"(\d+)","(\d+)"/.exec(line.trim());
+        if (!m) continue;
+        const pid = Number(m[1]);
+        const ppid = Number(m[2]);
+        if (!Number.isFinite(pid) || pid <= 0 || !Number.isFinite(ppid)) continue;
+        let list = map.get(ppid);
+        if (!list) {
+          list = [];
+          map.set(ppid, list);
+        }
+        list.push(pid);
+      }
     } catch {
-      return [];
+      /* empty map → no descendants */
+    }
+    return map;
+  }
+  // Unix：只对给定 root 拉一层层 pgrep（根数量通常很少）
+  const queue = [...new Set(roots.filter((p) => p > 0))];
+  const seen = new Set<number>(queue);
+  while (queue.length) {
+    const cur = queue.shift()!;
+    try {
+      const { stdout } = await runCmd('pgrep', ['-P', String(cur)], {
+        timeoutMs: 5000,
+      });
+      const kids = stdout
+        .split(/\s+/)
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      if (kids.length) map.set(cur, kids);
+      for (const k of kids) {
+        if (seen.has(k) || k === process.pid) continue;
+        seen.add(k);
+        queue.push(k);
+      }
+    } catch {
+      /* ignore */
     }
   }
-  try {
-    const { stdout } = await runCmd('pgrep', ['-P', String(pid)], {
-      timeoutMs: 5000,
-    });
-    return stdout
-      .split(/\s+/)
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0);
-  } catch {
-    return [];
-  }
+  return map;
 }
 
-/** 仅用于 classify（对照托管 job）；不做全机扫 */
-export async function collectDescendantPids(rootPid: number): Promise<Set<number>> {
+function descendantsFromMap(
+  rootPid: number,
+  childrenOf: Map<number, number[]>,
+): Set<number> {
   const out = new Set<number>();
   if (!Number.isFinite(rootPid) || rootPid <= 0) return out;
   out.add(rootPid);
   const queue = [rootPid];
   while (queue.length) {
     const cur = queue.shift()!;
-    for (const child of await childrenOf(cur)) {
+    for (const child of childrenOf.get(cur) || []) {
       if (out.has(child) || child === process.pid) continue;
       out.add(child);
       queue.push(child);
@@ -241,21 +262,32 @@ export async function collectDescendantPids(rootPid: number): Promise<Set<number
   return out;
 }
 
+/** 仅用于 classify（对照托管 job）；Win 上一次 CIM 快照 */
+export async function collectDescendantPids(rootPid: number): Promise<Set<number>> {
+  const map = await loadParentChildMap([rootPid]);
+  return descendantsFromMap(rootPid, map);
+}
+
 export async function classifyPorts(
   listeners: ListeningPort[],
   ctx: ClassifyContext,
 ): Promise<ClassifiedPort[]> {
   const selfPids = new Set<number>(ctx.selfPids || [process.pid]);
+  const roots = [
+    ...ctx.jobs.map((j) => j.pid),
+    ...ctx.shells.map((s) => s.pid),
+  ].filter((p) => p > 0);
+  const childMap = await loadParentChildMap(roots);
   const jobTrees: Array<{ id: string; pids: Set<number> }> = [];
   for (const j of ctx.jobs) {
     if (j.pid > 0) {
-      jobTrees.push({ id: j.id, pids: await collectDescendantPids(j.pid) });
+      jobTrees.push({ id: j.id, pids: descendantsFromMap(j.pid, childMap) });
     }
   }
   const shellTrees: Array<{ id: string; pids: Set<number> }> = [];
   for (const s of ctx.shells) {
     if (s.pid > 0) {
-      shellTrees.push({ id: s.id, pids: await collectDescendantPids(s.pid) });
+      shellTrees.push({ id: s.id, pids: descendantsFromMap(s.pid, childMap) });
     }
   }
 
@@ -467,24 +499,31 @@ export async function listClassifiedPorts(
   }
 }
 
-export async function killByPid(pid: number): Promise<KillResult> {
+export async function killByPid(
+  pid: number,
+  hint?: { processName?: string },
+): Promise<KillResult> {
   if (!Number.isFinite(pid) || pid <= 0) {
     return { ok: false, pid, error: '无效 pid' };
   }
   if (pid === process.pid) {
     return { ok: false, pid, error: '拒绝杀死 Runner 自身' };
   }
-  const listeners = (await listListeningPorts()).filter((L) => L.pid === pid);
-  const processName = listeners[0]?.processName;
+  const processName = hint?.processName;
   const r = await killPidTree(pid);
   return { ok: r.ok, pid, processName, error: r.ok ? undefined : r.detail };
 }
 
-export async function killByPort(port: number): Promise<KillResult> {
+export async function killByPort(
+  port: number,
+  listenersHint?: ListeningPort[],
+): Promise<KillResult> {
   if (!Number.isFinite(port) || port <= 0) {
     return { ok: false, port, error: '无效 port' };
   }
-  const listeners = (await listListeningPorts()).filter((L) => L.port === port);
+  const listeners = (listenersHint ?? (await listListeningPorts())).filter(
+    (L) => L.port === port,
+  );
   if (!listeners.length) {
     return { ok: false, port, error: `端口 ${port} 无 Listen 进程` };
   }
@@ -504,7 +543,8 @@ export async function reapUnmanagedPorts(
   const at = new Date().toISOString();
   const nodeOnly = opts?.nodeOnly !== false;
   try {
-    const ports = await classifyPorts(await listListeningPorts(), ctx);
+    const listeners = await listListeningPorts();
+    const ports = await classifyPorts(listeners, ctx);
     const targets = ports.filter((p) => {
       if (p.owner !== 'unmanaged') return false;
       if (!nodeOnly) return true;
@@ -521,7 +561,7 @@ export async function reapUnmanagedPorts(
     for (const t of targets) {
       if (seen.has(t.pid)) continue;
       seen.add(t.pid);
-      killed.push(await killByPid(t.pid));
+      killed.push(await killByPid(t.pid, { processName: t.processName }));
     }
     return { ok: true, action: 'reap', nodeOnly, killed, skipped, at };
   } catch (err) {

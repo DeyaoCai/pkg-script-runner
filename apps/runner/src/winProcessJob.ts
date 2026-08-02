@@ -92,12 +92,18 @@ function load(): Apis | null {
   }
   try {
     const require = createRequire(import.meta.url);
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const koffi = require('koffi') as typeof import('koffi');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
+    const koffi = require('koffi') as any;
     const kernel32 = koffi.load('kernel32.dll');
     const ntdll = koffi.load('ntdll.dll');
     const crt = koffi.load('msvcrt.dll');
-    const ptrSize = koffi.pointerSize as number;
+    // koffi 类型未导出 pointerSize；运行时有，缺省按架构估
+    const ptrSize =
+      typeof koffi.pointerSize === 'number'
+        ? koffi.pointerSize
+        : process.arch.includes('64')
+          ? 8
+          : 4;
     apis = {
       koffi,
       ptrSize,
@@ -430,7 +436,22 @@ export function spawnInWinJob(opts: {
   const stdout = fs.createReadStream('', { fd: outFd, autoClose: true });
   const stderr = fs.createReadStream('', { fd: errFd, autoClose: true });
 
-  const emitter = new EventEmitter() as ChildProcess & EventEmitter;
+  /** ChildProcess 若干字段在 @types/node 里是 readonly，自建伪进程需可写 */
+  type FakeChild = EventEmitter & {
+    pid: number;
+    stdout: ChildProcess['stdout'];
+    stderr: ChildProcess['stderr'];
+    stdin: null;
+    killed: boolean;
+    connected: boolean;
+    exitCode: number | null;
+    signalCode: NodeJS.Signals | null;
+    spawnargs: string[];
+    spawnfile: string;
+    kill: ChildProcess['kill'];
+  };
+
+  const emitter = new EventEmitter() as FakeChild;
   emitter.pid = pid;
   emitter.stdout = stdout as ChildProcess['stdout'];
   emitter.stderr = stderr as ChildProcess['stderr'];
@@ -488,7 +509,7 @@ export function spawnInWinJob(opts: {
     return true;
   }) as ChildProcess['kill'];
 
-  return { proc: emitter, processJob };
+  return { proc: emitter as unknown as ChildProcess, processJob };
 }
 
 export function winProcessJobAvailable(): boolean {

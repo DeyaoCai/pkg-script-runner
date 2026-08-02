@@ -48,6 +48,7 @@ import {
 } from './logSink.js';
 import { flushLogsNow, startControlServer } from './controlServer.js';
 import { diagLog, diagLogPath, readDiagTail } from './diagLog.js';
+import { chromeBackground } from '@pkg-runner/tokens';
 import { pkgRunnerColorEnv, type PkgRunnerColorEnv } from './appProfile.js';
 import { resolveEnvAssetPath } from './appIcons.js';
 import {
@@ -210,15 +211,8 @@ let shared: SharedSettings = defaultSharedSettings();
 /** True after tray POST /v1/settings applied at least once. */
 let traySettingsReceived = false;
 
-/** Keep in sync with ui/tokens.css --neutral-850 / --neutral-50 (= --color-bg-base). */
-const WINDOW_BG: Record<PkgRunnerColorEnv, { dark: string; light: string }> = {
-  prod: { dark: '#1b1d21', light: '#f4f5f7' },
-  test: { dark: '#3d1c0a', light: '#f7f0ea' },
-};
-
 function windowBackgroundForTheme(theme: 'dark' | 'light'): string {
-  const bg = WINDOW_BG[pkgRunnerColorEnv()];
-  return theme === 'light' ? bg.light : bg.dark;
+  return chromeBackground(pkgRunnerColorEnv(), theme);
 }
 
 type GlassLabKind = 'acrylic' | 'mica' | 'tabbed' | 'acrylic-clip' | 'css-only';
@@ -316,17 +310,17 @@ function syncJobsUi() {
 }
 
 function appendSystemLog(chunk: string) {
-  send('pkg:log', { kind: 'system', chunk });
+  sendPlain('pkg:log', { kind: 'system', chunk });
   appendSystemDiskLog(chunk);
 }
 
 function appendJobLog(id: string, scriptName: string, dir: string, chunk: string) {
-  send('pkg:log', { kind: 'job', id, scriptName, dir, chunk });
+  sendPlain('pkg:log', { kind: 'job', id, scriptName, dir, chunk });
   appendJobDiskLog(id, scriptName, dir, chunk);
 }
 
 function sendShellData(id: string, data: string) {
-  send('pkg:shell-data', { id, data });
+  sendPlain('pkg:shell-data', { id, data });
 }
 
 /** 正在异步杀掉的 job（已从 jobs 摘掉，禁止立刻同 key 再 start） */
@@ -1160,10 +1154,23 @@ async function runScriptFromControl(req: {
   }
 }
 
+/** 流式热路径：plain POJO / string，走 structuredClone，避免双重 JSON */
+function sendPlain(channel: string, ...args: unknown[]) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    mainWindow.webContents.send(channel, ...args);
+  } catch (err) {
+    diagLog('runner', 'ipc.send.fail', {
+      channel,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** 快照类载荷：防御性 JSON 克隆，避免不可 clone 对象跨进程失败 */
 function send(channel: string, ...args: unknown[]) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   try {
-    // 保证可 structuredClone，避免 preload→渲染进程 "An object could not be cloned"
     const safe = args.map((a) =>
       a === undefined ? null : JSON.parse(JSON.stringify(a)),
     );
