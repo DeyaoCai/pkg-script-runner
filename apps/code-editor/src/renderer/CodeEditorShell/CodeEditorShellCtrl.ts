@@ -463,6 +463,8 @@ export class CodeEditorShellCtrl extends Controller<TData, TProps, TState> {
     return this.data.boundRoot ?? '';
   }
 
+  private unsubExternalNav: (() => void) | null = null;
+
   async bootstrap(): Promise<void> {
     if (this.state.bootstrapped) return;
     const initial = await this.bridge.getInitialOpenDir();
@@ -471,6 +473,13 @@ export class CodeEditorShellCtrl extends Controller<TData, TProps, TState> {
     } else {
       await this.applyNav(await this.bridge.getNav());
     }
+    this.unsubExternalNav?.();
+    this.unsubExternalNav =
+      this.bridge.onExternalNav?.((nav) => {
+        const wsChanged =
+          (nav.workspaceRoot || '') !== (this.data.workspaceRoot || '');
+        void this.applyNav(nav, { clearTabs: wsChanged });
+      }) ?? null;
     this.setState({ bootstrapped: true });
     await this.hydrateDesignRoot();
     await this.restoreRecentFiles();
