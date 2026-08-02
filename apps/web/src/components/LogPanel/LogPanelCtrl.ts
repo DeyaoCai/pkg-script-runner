@@ -66,6 +66,28 @@ export class LogPanelCtrl extends Controller<TData, TProps, TState> {
     }
   }
 
+  async toggleShellLayout(): Promise<void> {
+    const cur = this.app.data.settings.shellLayout === 'single' ? 'single' : 'grid';
+    const next = cur === 'grid' ? 'single' : 'grid';
+    // 乐观更新，避免等托盘回包前点了没反应
+    this.app.setData({
+      settings: { ...this.app.data.settings, shellLayout: next },
+    });
+    const api = this.app.api;
+    if (!api?.requestTraySettingsPatch) {
+      this.app.flashMeta('布局已本地切换（托盘未连接，重启后可能复原）', true);
+      return;
+    }
+    try {
+      await api.requestTraySettingsPatch({ shellLayout: next });
+    } catch (e) {
+      this.app.setData({
+        settings: { ...this.app.data.settings, shellLayout: cur },
+      });
+      this.app.flashMeta(e instanceof Error ? e.message : String(e), true);
+    }
+  }
+
   async openLogsDir(): Promise<void> {
     if (!this.app.api?.openLogsDir) {
       this.app.flashMeta('Runner API 不可用', true);

@@ -4,9 +4,14 @@
  *
  *   pnpm --filter pkg-runner ctl -- health
  *   pnpm --filter pkg-runner ctl -- flush-logs
- *   pnpm --filter pkg-runner ctl -- start dev [dir]
- *   pnpm --filter pkg-runner ctl -- restart dev
- *   pnpm --filter pkg-runner ctl -- stop lint
+ *   pnpm --filter pkg-runner ctl -- start|restart|stop <script> [dir]
+ *   pnpm --filter pkg-runner ctl -- shell-open [dir]
+ *   pnpm --filter pkg-runner ctl -- shell-exec <command> [dir]
+ *   pnpm --filter pkg-runner ctl -- shell-close [id|dir]
+ *   pnpm --filter pkg-runner ctl -- shell-list [dir]
+ *   pnpm --filter pkg-runner ctl -- ports
+ *   pnpm --filter pkg-runner ctl -- port-kill <port>
+ *   pnpm --filter pkg-runner ctl -- ports-reap [--all]
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -33,6 +38,13 @@ function usage(code = 1) {
   ctl health
   ctl flush-logs
   ctl start|restart|stop <script> [projectDir]
+  ctl shell-open [projectDir]
+  ctl shell-exec <command> [projectDir]
+  ctl shell-close [shellId|projectDir]
+  ctl shell-list [projectDir]
+  ctl ports                 # 监听端口 + owner（unmanaged=漂移）
+  ctl port-kill <port>      # 按端口杀进程树
+  ctl ports-reap [--all]    # 默认只清 unmanaged 的 Node/dev server；--all 不限进程名
 
 发现文件: %APPDATA%/pkg-runner[/ -dev]/control/http.json（可用 PKG_RUNNER_PROFILE）
 正规通道: HTTP 127.0.0.1 + Bearer token（见该文件）
@@ -54,7 +66,7 @@ function loadEndpoint() {
   }
 }
 
-async function api(method, pathname, body) {
+async function api(method, pathname, body, { print = true } = {}) {
   const ep = loadEndpoint();
   const url = `${ep.baseUrl}${pathname}`;
   const headers = {
@@ -78,7 +90,38 @@ async function api(method, pathname, body) {
     console.error(`[ctl] 失败 HTTP ${res.status}:`, json.error || json);
     process.exit(1);
   }
-  console.log(JSON.stringify(json, null, 2));
+  if (print) console.log(JSON.stringify(json, null, 2));
+  return json;
+}
+
+function pad(s, n) {
+  const t = String(s ?? '');
+  return t.length >= n ? t.slice(0, n) : t + ' '.repeat(n - t.length);
+}
+
+function printPortsTable(json) {
+  const ports = Array.isArray(json.ports) ? json.ports : [];
+  console.log(
+    `${pad('PORT', 7)} ${pad('PID', 8)} ${pad('OWNER', 12)} ${pad('PROCESS', 16)} REF`,
+  );
+  console.log('-'.repeat(72));
+  const sorted = [...ports].sort(
+    (a, b) =>
+      (a.owner === 'unmanaged' ? 0 : 1) - (b.owner === 'unmanaged' ? 0 : 1) ||
+      a.port - b.port,
+  );
+  for (const p of sorted) {
+    const mark = p.owner === 'unmanaged' ? ' <-- orphan' : '';
+    const ref = p.jobId || p.shellId || '';
+    const line = `${pad(p.port, 7)} ${pad(p.pid, 8)} ${pad(p.owner, 12)} ${pad(p.processName, 16)} ${ref}${mark}`;
+    if (p.owner === 'unmanaged') {
+      console.log(`* ${line}`);
+    } else {
+      console.log(`  ${line}`);
+    }
+  }
+  console.log('-'.repeat(72));
+  console.log(`total ${ports.length} · orphans ${json.orphans ?? 0}`);
 }
 
 const argv = process.argv.slice(2).filter((a) => a !== '--');
@@ -106,6 +149,69 @@ if (cmd === 'start' || cmd === 'restart' || cmd === 'stop') {
     script,
     dir,
   });
+  process.exit(0);
+}
+
+if (cmd === 'shell-open') {
+  const dir = argv[1] ? path.resolve(argv[1]) : null;
+  await api('POST', '/v1/shell', { action: 'open', dir });
+  process.exit(0);
+}
+
+if (cmd === 'shell-exec') {
+  const rest = argv.slice(1);
+  if (!rest.length) usage(1);
+  let dir = null;
+  let commandParts = rest;
+  const last = rest[rest.length - 1];
+  if (
+    rest.length >= 2 &&
+    last &&
+    (last.includes('/') || last.includes('\\') || /^[A-Za-z]:/.test(last)) &&
+    fs.existsSync(path.resolve(last)) &&
+    fs.statSync(path.resolve(last)).isDirectory()
+  ) {
+    dir = path.resolve(last);
+    commandParts = rest.slice(0, -1);
+  }
+  const command = commandParts.join(' ').trim();
+  if (!command) usage(1);
+  await api('POST', '/v1/shell', { action: 'exec', command, dir });
+  process.exit(0);
+}
+
+if (cmd === 'shell-close') {
+  const target = argv[1] ? String(argv[1]) : '';
+  if (!target) usage(1);
+  const body = target.startsWith('shell::')
+    ? { action: 'close', id: target }
+    : { action: 'close', dir: path.resolve(target) };
+  await api('POST', '/v1/shell', body);
+  process.exit(0);
+}
+
+if (cmd === 'shell-list') {
+  const dir = argv[1] ? path.resolve(argv[1]) : null;
+  await api('POST', '/v1/shell', { action: 'list', dir });
+  process.exit(0);
+}
+
+if (cmd === 'ports') {
+  const json = await api('POST', '/v1/ports', { action: 'list' }, { print: false });
+  printPortsTable(json);
+  process.exit(0);
+}
+
+if (cmd === 'port-kill') {
+  const port = Number(argv[1]);
+  if (!Number.isFinite(port) || port <= 0) usage(1);
+  await api('POST', '/v1/ports', { action: 'kill', port });
+  process.exit(0);
+}
+
+if (cmd === 'ports-reap') {
+  const all = argv.includes('--all');
+  await api('POST', '/v1/ports', { action: 'reap', nodeOnly: !all });
   process.exit(0);
 }
 

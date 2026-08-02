@@ -15,6 +15,18 @@
             );
           }
         } catch (e) {}
+        try {
+          var env =
+            window.pkgRunner && typeof window.pkgRunner.getColorEnv === 'function'
+              ? window.pkgRunner.getColorEnv()
+              : 'prod';
+          document.documentElement.setAttribute(
+            'data-env',
+            env === 'test' ? 'test' : 'prod',
+          );
+        } catch (e) {
+          document.documentElement.setAttribute('data-env', 'prod');
+        }
       })();
     </script>
   </head>

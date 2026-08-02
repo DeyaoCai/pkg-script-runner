@@ -16,7 +16,7 @@
       </div>
     </div>
     <div class="scripts" role="group" aria-labelledby="scriptsLabel">
-      <div v-if="!app.data.project" class="empty" role="status">选择左侧项目以查看 scripts</div>
+      <div v-if="!app.data.project" class="empty" role="status">在标题栏选择项目以查看 scripts</div>
       <div v-else-if="!app.data.project.scripts.length" class="empty" role="status">
         package.json 里没有 scripts
       </div>
@@ -26,11 +26,15 @@
         :key="s.name"
         type="button"
         class="script-row"
-        :class="{ 'is-running': ctrl.isRunning(s.name) }"
+        :class="{
+          'is-running': ctrl.isRunning(s.name),
+          'is-stopping': ctrl.isStopping(s.name),
+        }"
         :data-script="s.name"
         :title="s.command"
         :aria-label="ctrl.actionLabel(s.name)"
         :aria-pressed="ctrl.isRunning(s.name)"
+        :aria-busy="ctrl.isStopping(s.name)"
         @click="ctrl.onClick($event, s.name)"
         @dblclick.prevent="ctrl.onActivate(s.name)"
         @mouseenter="ctrl.showPop($event, s.name, s.command)"
@@ -39,7 +43,9 @@
         <span
           class="script-run-status"
           aria-hidden="true"
-          :title="ctrl.isRunning(s.name) ? '运行中' : undefined"
+          :title="
+            ctrl.isStopping(s.name) ? '正在停止…' : ctrl.isRunning(s.name) ? '运行中' : undefined
+          "
         ></span>
         <span class="script-name">{{ s.name }}</span>
       </button>
@@ -56,7 +62,13 @@
       <div class="script-popover-name">{{ ctrl.state.popover.name }}</div>
       <pre class="script-popover-cmd">{{ ctrl.state.popover.command }}</pre>
       <div class="script-popover-hint">
-        {{ ctrl.state.popover.running ? '双击或 Enter 停止' : '双击或 Enter 运行' }}
+        {{
+          ctrl.isStopping(ctrl.state.popover.name)
+            ? '正在停止…'
+            : ctrl.state.popover.running
+              ? '双击或 Enter 停止'
+              : '双击或 Enter 运行'
+        }}
       </div>
     </div>
   </Teleport>

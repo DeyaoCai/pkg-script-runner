@@ -41,6 +41,83 @@ export class TerminalViewCtrl extends Controller<TData, TProps, TState> {
     }
   }
 
+  private async copySelection(): Promise<boolean> {
+    const text = this.term?.getSelection() ?? '';
+    if (!text) return false;
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  private async pasteFromClipboard(): Promise<void> {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) void this.app.api?.shellWrite(this.props.sessionId, text);
+    } catch {
+      /* clipboard permission / empty */
+    }
+  }
+
+  /**
+   * Ctrl/Cmd+C：有选区则复制，否则放行给 PTY（^C）。
+   * Ctrl/Cmd+V、Shift+Insert：粘贴；Ctrl+Insert：复制选区。
+   */
+  private onTermKey = (ev: KeyboardEvent): boolean => {
+    if (ev.type !== 'keydown' || !this.term) return true;
+    const key = ev.key.toLowerCase();
+    const mod = ev.ctrlKey || ev.metaKey;
+
+    if (key === 'c' && mod && !ev.altKey) {
+      if (ev.shiftKey || this.term.hasSelection()) {
+        void this.copySelection();
+        return false;
+      }
+      return true;
+    }
+
+    if (key === 'insert' && mod && !ev.shiftKey && !ev.altKey) {
+      if (this.term.hasSelection()) {
+        void this.copySelection();
+        return false;
+      }
+      return true;
+    }
+
+    if (key === 'v' && mod && !ev.altKey) {
+      void this.pasteFromClipboard();
+      return false;
+    }
+
+    if (key === 'insert' && ev.shiftKey && !mod && !ev.altKey) {
+      void this.pasteFromClipboard();
+      return false;
+    }
+
+    return true;
+  };
+
+  private onCopyEvent = (ev: ClipboardEvent): void => {
+    if (!this.term?.hasSelection()) return;
+    const text = this.term.getSelection();
+    if (!text) return;
+    ev.preventDefault();
+    ev.clipboardData?.setData('text/plain', text);
+  };
+
   mount(host: HTMLElement): void {
     this.host = host;
     const pending = this.app.takeShellPending(this.props.sessionId);
@@ -52,14 +129,18 @@ export class TerminalViewCtrl extends Controller<TData, TProps, TState> {
       fontSize: 13,
       theme: termTheme(),
       convertEol: true,
+      rightClickSelectsWord: true,
+      scrollback: 5000,
     });
     this.fit = new FitAddon();
     this.term.loadAddon(this.fit);
     this.term.open(host);
     if (pending) this.term.write(pending);
+    this.term.attachCustomKeyEventHandler(this.onTermKey);
     this.term.onData((data) => {
       void this.app.api?.shellWrite(this.props.sessionId, data);
     });
+    host.addEventListener('copy', this.onCopyEvent);
     window.addEventListener('pkg:shell-data', this.onShellData);
     this.ro = new ResizeObserver(() => this.fitAndResize());
     this.ro.observe(host);
@@ -79,6 +160,7 @@ export class TerminalViewCtrl extends Controller<TData, TProps, TState> {
 
   unmount(): void {
     window.removeEventListener('pkg:shell-data', this.onShellData);
+    this.host?.removeEventListener('copy', this.onCopyEvent);
     this.ro?.disconnect();
     this.ro = null;
     this.term?.dispose();

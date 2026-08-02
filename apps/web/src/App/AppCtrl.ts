@@ -1,13 +1,29 @@
 import { Controller } from '@pkg-runner/controller';
-import type { AppSettings, JobInfo, LogPayload, ProjectPayload, ProjectsState, PkgRunnerApi } from '../env';
+import {
+  BRAND_PRESET_PROD,
+  applyBrandColor as setBrandTone,
+  applyColorEnv as setColorEnv,
+  applyGlass as setGlass,
+  applyTheme as setUiTheme,
+  normalizeBrandColor,
+} from '@pkg-runner/tokens';
+import type {
+  AppSettings,
+  JobInfo,
+  LogPayload,
+  ProjectPayload,
+  ProjectsState,
+  PkgRunnerApi,
+  PkgRunnerColorEnv,
+} from '../env';
 import { ansiToHtml } from '../lib/ansi';
 import { applyDocumentFonts } from '../lib/fonts';
 import { fuzzyBestScore, sameDir } from '../lib/fuzzy';
 import { tryPkgApi } from '../composables/usePkgApi';
-import { ProjectsPanelCtrl } from '../components/ProjectsPanel/ProjectsPanelCtrl';
 import { ScriptsPanelCtrl } from '../components/ScriptsPanel/ScriptsPanelCtrl';
 import { LogPanelCtrl } from '../components/LogPanel/LogPanelCtrl';
 import { TitleBarCtrl } from '../components/TitleBar/TitleBarCtrl';
+import { PortsPanelCtrl } from '../components/PortsPanel/PortsPanelCtrl';
 
 export type LogSession = {
   id: string;
@@ -18,6 +34,8 @@ export type LogSession = {
   text: string;
   html: string | null;
   running: boolean;
+  /** 已点停止、进程树尚未杀完 */
+  stopping: boolean;
   code: number | null;
   cwd?: string;
 };
@@ -27,6 +45,8 @@ export const SYSTEM_ID = 'system';
 const GLASS_BLUR_KEY = 'pkg-runner:glass-blur';
 
 export type AppData = {
+  workspaceRoot: string | null;
+  recentWorkspaces: string[];
   projects: ProjectsState['projects'];
   activeProject: string | null;
   project: ProjectPayload | null;
@@ -43,6 +63,7 @@ export type AppData = {
   projectsWidth: number;
   scriptsWidth: number;
   theme: 'dark' | 'light';
+  colorEnv: PkgRunnerColorEnv;
   glassAlpha: number;
   glassBlur: number;
   fontId: string;
@@ -75,8 +96,10 @@ function readLocalBlur(): number {
 function defaultSettings(): AppSettings {
   return {
     fontId: 'jetbrains',
-    glassAlpha: 55,
+    glassAlpha: 100,
     theme: 'dark',
+    brandTone: 'prod',
+    brandColor: BRAND_PRESET_PROD,
     shellMosaicCols: 2,
     shellLayout: 'grid',
     alwaysOnTop: false,
@@ -95,17 +118,21 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   private cleanupBoot: (() => void) | undefined;
   private metaFlashTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly shellPendingData = new Map<string, string>();
+  /** 主机正在杀树的 job id（jobs 已摘掉、exit 未到） */
+  private stoppingIds = new Set<string>();
 
   declare controllers: {
-    projects: ProjectsPanelCtrl;
     scripts: ScriptsPanelCtrl;
     log: LogPanelCtrl;
     titleBar: TitleBarCtrl;
+    ports: PortsPanelCtrl;
   };
 
   constructor() {
     super({
       data: {
+        workspaceRoot: null,
+        recentWorkspaces: [],
         projects: [],
         activeProject: null,
         project: null,
@@ -115,14 +142,15 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
         activeLogId: SYSTEM_ID,
         persistLogs: false,
         maximized: false,
-        meta: '选择含 package.json 的项目目录',
+        meta: '选择工作区，再点仓库运行脚本',
         metaError: false,
         projectSearch: '',
         scriptSearch: '',
         projectsWidth: loadWidth('pkg-runner:projects-w', 220),
-        scriptsWidth: loadWidth('pkg-runner:scripts-w', 176),
+        scriptsWidth: loadWidth('pkg-runner:scripts-w', 200),
         theme: 'dark',
-        glassAlpha: 55,
+        colorEnv: 'prod',
+        glassAlpha: 100,
         glassBlur: readLocalBlur(),
         fontId: 'jetbrains',
       },
@@ -131,12 +159,13 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     });
     this.api = tryPkgApi();
     this.controllers = {
-      projects: new ProjectsPanelCtrl(this),
       scripts: new ScriptsPanelCtrl(this),
       log: new LogPanelCtrl(this),
       titleBar: new TitleBarCtrl(this),
+      ports: new PortsPanelCtrl(this),
     };
     this.ensureSystemSession();
+    this.applyColorEnv(this.api?.getColorEnv?.() ?? 'prod');
     if (this.api) {
       this.cleanupBoot = this.bindIpc(this.api);
     }
@@ -150,18 +179,22 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       }),
       api.onJobs((list) => {
         void this.setData({ jobs: list });
-        for (const j of list) {
-          const s = this.data.logSessions[j.id];
-          if (s) s.running = true;
-        }
-        for (const [id, s] of Object.entries(this.data.logSessions)) {
-          if (s.kind === 'job' && !list.some((j) => j.id === id)) s.running = false;
-        }
+        this.reconcileJobSessionFlags();
       }),
+      ...(typeof api.onStopping === 'function'
+        ? [
+            api.onStopping((ids) => {
+              this.stoppingIds = new Set(ids);
+              this.reconcileJobSessionFlags();
+            }),
+          ]
+        : []),
       api.onExit((payload) => {
+        this.stoppingIds.delete(payload.id);
         const s = this.data.logSessions[payload.id];
         if (s) {
           s.running = false;
+          s.stopping = false;
           s.code = payload.code;
         }
       }),
@@ -173,6 +206,20 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       api.onOpenDir((dir) => {
         void this.addProjectFromDir(dir);
       }),
+      ...(typeof api.onFocusSession === 'function'
+        ? [
+            api.onFocusSession((payload) => {
+              void this.focusSessionFromHost(payload);
+            }),
+          ]
+        : []),
+      ...(typeof api.onShellSession === 'function'
+        ? [
+            api.onShellSession((payload) => {
+              void this.ensureShellSessionFromHost(payload);
+            }),
+          ]
+        : []),
       api.onSettings((s) => {
         this.applySettings(s);
       }),
@@ -250,12 +297,19 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     return list;
   }
 
+  private onWindowBlurClearResize = (): void => {
+    document.body.classList.remove('is-resizing-projects', 'is-resizing-scripts');
+  };
+
   mount(): void {
     this.applyLayoutVars();
     this.bootstrap();
+    window.addEventListener('blur', this.onWindowBlurClearResize);
   }
 
   unmount(): void {
+    window.removeEventListener('blur', this.onWindowBlurClearResize);
+    document.body.classList.remove('is-resizing-projects', 'is-resizing-scripts');
     this.cleanupBoot?.();
     this.cleanupBoot = undefined;
     this.controllers.titleBar.dispose();
@@ -271,8 +325,50 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       text: '',
       html: null,
       running: false,
+      stopping: false,
       code: null,
     };
+  }
+
+  /** running / stopping：jobs 列表 + 主机 stopping 集合 */
+  private reconcileJobSessionFlags(): void {
+    const alive = new Set(this.data.jobs.map((j) => j.id));
+    for (const [id, s] of Object.entries(this.data.logSessions)) {
+      if (s.kind !== 'job') continue;
+      if (alive.has(id)) {
+        s.running = true;
+        s.stopping = false;
+      } else if (this.stoppingIds.has(id)) {
+        s.running = true;
+        s.stopping = true;
+      } else {
+        s.running = false;
+        s.stopping = false;
+      }
+    }
+  }
+
+  isScriptBusy(dir: string, scriptName: string): boolean {
+    if (this.findJob(dir, scriptName)) return true;
+    return Object.values(this.data.logSessions).some(
+      (s) =>
+        s.kind === 'job' &&
+        s.scriptName === scriptName &&
+        !!s.dir &&
+        sameDir(s.dir, dir) &&
+        (s.running || s.stopping),
+    );
+  }
+
+  isScriptStopping(dir: string, scriptName: string): boolean {
+    return Object.values(this.data.logSessions).some(
+      (s) =>
+        s.kind === 'job' &&
+        s.scriptName === scriptName &&
+        !!s.dir &&
+        sameDir(s.dir, dir) &&
+        s.stopping,
+    );
   }
 
   getSessionHtml(s: LogSession): string {
@@ -307,6 +403,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
         text: '',
         html: null,
         running: !!meta?.running,
+        stopping: !!meta?.stopping,
         code: null,
         cwd: meta?.cwd,
       };
@@ -319,6 +416,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     if (meta?.dir !== undefined) s.dir = meta.dir;
     if (meta?.scriptName) s.scriptName = meta.scriptName;
     if (meta?.running != null) s.running = meta.running;
+    if (meta?.stopping != null) s.stopping = meta.stopping;
     if (meta?.cwd) s.cwd = meta.cwd;
   }
 
@@ -361,6 +459,8 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
 
   async applyProjectsState(state: ProjectsState): Promise<void> {
     this.setData({
+      workspaceRoot: state.workspaceRoot ?? null,
+      recentWorkspaces: state.recentWorkspaces ?? [],
       projects: state.projects,
       activeProject: state.activeProject,
     });
@@ -372,12 +472,21 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       } catch (e) {
         this.setData({
           project: null,
-          meta: e instanceof Error ? e.message : String(e),
+          meta:
+            e instanceof Error
+              ? e.message
+              : '该仓库没有 package.json，无法加载脚本',
           metaError: true,
         });
       }
     } else {
-      this.setData({ project: null });
+      this.setData({
+        project: null,
+        meta: state.workspaceRoot
+          ? '在左侧选择仓库以加载脚本'
+          : '选择工作区，再点仓库运行脚本',
+        metaError: false,
+      });
     }
     this.updateMeta();
     try {
@@ -392,13 +501,22 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     const a = Math.min(100, Math.max(10, Math.round(alphaPct)));
     const b = Math.min(40, Math.max(0, Math.round(blurPx)));
     this.setData({ glassAlpha: a, glassBlur: b });
-    document.documentElement.style.setProperty('--glass-alpha', String(a / 100));
-    document.documentElement.style.setProperty('--glass-blur', `${b}px`);
+    setGlass(a, b);
   }
 
   applyTheme(next: 'dark' | 'light'): void {
-    this.setData({ theme: next });
-    document.documentElement.setAttribute('data-theme', next);
+    this.setData({ theme: setUiTheme(next) });
+  }
+
+  applyColorEnv(env: PkgRunnerColorEnv): void {
+    const next = setColorEnv(env === 'test' ? 'test' : 'prod');
+    this.setData({ colorEnv: next });
+    document.title =
+      next === 'test' ? 'Pkg Runner · 测试' : 'Pkg Runner';
+  }
+
+  applyBrandColor(hex: string): void {
+    setBrandTone(normalizeBrandColor(hex, BRAND_PRESET_PROD));
   }
 
   setFont(id: string): void {
@@ -412,6 +530,11 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     this.applyTheme(s.theme === 'light' ? 'light' : 'dark');
     this.applyGlassVars(s.glassAlpha, this.data.glassBlur);
     this.setFont(s.fontId || 'jetbrains');
+    // data-env / icon 跟运行环境；设置变更不切换整套色板
+    this.applyColorEnv(this.api?.getColorEnv?.() ?? this.data.colorEnv ?? 'prod');
+    if (typeof s.brandColor === 'string' && s.brandColor.trim()) {
+      this.applyBrandColor(s.brandColor);
+    }
     const cols = Math.min(4, Math.max(1, s.shellMosaicCols || 2));
     document.documentElement.style.setProperty('--shell-mosaic-cols', String(cols));
   }
@@ -441,8 +564,66 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     }
   }
 
+  /** 控制面打开的交互 Shell：在 LogPanel 建 tab */
+  ensureShellSessionFromHost(payload: {
+    id: string;
+    dir: string;
+    cwd: string;
+    title: string;
+  }): void {
+    this.appendToSession(payload.id, '', {
+      title: payload.title || 'Shell',
+      dir: payload.dir,
+      cwd: payload.cwd,
+      running: true,
+    });
+    void this.setData({ activeLogId: payload.id });
+    const pending = this.shellPendingData.get(payload.id);
+    if (pending) {
+      window.dispatchEvent(
+        new CustomEvent('pkg:shell-data', { detail: { id: payload.id, data: pending } }),
+      );
+      this.shellPendingData.delete(payload.id);
+    }
+  }
+
+  /** 控制面 start/restart/stop / shell：聚焦对应日志或终端 */
+  async focusSessionFromHost(payload: {
+    id: string;
+    dir: string | null;
+  }): Promise<void> {
+    const dir = payload.dir?.trim() || '';
+    if (dir && this.api) {
+      try {
+        if (!this.data.activeProject || !sameDir(this.data.activeProject, dir)) {
+          await this.applyProjectsState(await this.api.setActiveProject(dir));
+        }
+      } catch {
+        try {
+          await this.addProjectFromDir(dir);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    const id = String(payload.id || '').trim();
+    if (!id) return;
+    if (!this.data.logSessions[id]) {
+      this.appendToSession(id, '', {
+        title: id.startsWith('shell::') ? 'Shell' : id.split('::').pop() || id,
+        dir: dir || null,
+        running: true,
+      });
+    }
+    void this.setData({ activeLogId: id });
+  }
+
   async pickAndAddProject(): Promise<void> {
     if (!this.api) return;
+    if (typeof this.api.pickWorkspace === 'function') {
+      await this.applyProjectsState(await this.api.pickWorkspace());
+      return;
+    }
     const dir = await this.api.pickDir();
     if (dir) await this.addProjectFromDir(dir);
   }
@@ -457,9 +638,11 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     const dir = this.data.project.dir;
     const existing = this.findJob(dir, scriptName);
     if (existing) {
-      await this.api.stop(existing.id);
+      await this.stopJob(existing.id);
       return;
     }
+    // 停止中禁止立刻再 start（与主机 stoppingJobs 对齐）
+    if (this.isScriptStopping(dir, scriptName)) return;
     const id = await this.api.runScript(dir, scriptName);
     this.setData({ activeLogId: id });
     this.appendToSession(id, '', {
@@ -467,10 +650,18 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       scriptName,
       dir,
       running: true,
+      stopping: false,
     });
   }
 
   async stopJob(jobId: string): Promise<void> {
+    const s = this.data.logSessions[jobId];
+    if (s?.stopping) return;
+    if (s) {
+      s.stopping = true;
+      s.running = true;
+    }
+    this.stoppingIds.add(jobId);
     await this.api?.stop(jobId);
   }
 
@@ -485,10 +676,11 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       return;
     }
     try {
-      if (s.running) await this.api.stop(jobId);
+      if (s.running || s.stopping) await this.stopJob(jobId);
       s.text = '';
       s.html = null;
       s.running = false;
+      s.stopping = false;
       s.code = null;
       const newId = await this.api.runScript(dir, scriptName);
       this.setData({ activeLogId: newId });
@@ -589,41 +781,60 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   }
 
   applyLayoutVars(): void {
-    this.setProjectsWidth(this.data.projectsWidth);
     this.setScriptsWidth(this.data.scriptsWidth);
     const cols = Math.min(4, Math.max(1, this.data.settings.shellMosaicCols || 2));
     document.documentElement.style.setProperty('--shell-mosaic-cols', String(cols));
   }
 
-  onProjectsResize(e: PointerEvent): void {
+  private beginSplitResize(
+    e: PointerEvent,
+    bodyClass: 'is-resizing-projects' | 'is-resizing-scripts',
+    onDelta: (dx: number) => void,
+  ): void {
+    if (e.button !== 0) return;
+    e.preventDefault();
     const startX = e.clientX;
-    const startW = this.data.projectsWidth;
+    const target = e.currentTarget;
+    if (target instanceof Element) {
+      try {
+        target.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }
     const onMove = (ev: PointerEvent) => {
-      this.setProjectsWidth(Math.min(420, Math.max(108, startW + (ev.clientX - startX))));
+      onDelta(ev.clientX - startX);
     };
-    const onUp = () => {
+    const onEnd = () => {
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      document.body.classList.remove('is-resizing-projects');
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+      document.body.classList.remove(bodyClass);
+      if (target instanceof Element) {
+        try {
+          target.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
     };
-    document.body.classList.add('is-resizing-projects');
+    document.body.classList.add(bodyClass);
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+  }
+
+  onProjectsResize(e: PointerEvent): void {
+    const startW = this.data.projectsWidth;
+    this.beginSplitResize(e, 'is-resizing-projects', (dx) => {
+      this.setProjectsWidth(Math.min(420, Math.max(108, startW + dx)));
+    });
   }
 
   onScriptsResize(e: PointerEvent): void {
-    const startX = e.clientX;
     const startW = this.data.scriptsWidth;
-    const onMove = (ev: PointerEvent) => {
-      this.setScriptsWidth(Math.min(420, Math.max(120, startW + (ev.clientX - startX))));
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      document.body.classList.remove('is-resizing-scripts');
-    };
-    document.body.classList.add('is-resizing-scripts');
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    this.beginSplitResize(e, 'is-resizing-scripts', (dx) => {
+      this.setScriptsWidth(Math.min(420, Math.max(120, startW + dx)));
+    });
   }
 }

@@ -8,7 +8,14 @@ export type ProjectPayload = {
 };
 
 export type ProjectsState = {
-  projects: Array<{ dir: string; name: string; scriptCount: number }>;
+  workspaceRoot: string | null;
+  recentWorkspaces: string[];
+  projects: Array<{
+    dir: string;
+    name: string;
+    scriptCount: number;
+    rel: string;
+  }>;
   activeProject: string | null;
 };
 
@@ -22,6 +29,8 @@ type SettingsPayload = {
   fontId: string;
   glassAlpha: number;
   theme: 'dark' | 'light';
+  brandTone: 'prod' | 'test';
+  brandColor: string;
   shellMosaicCols: number;
   shellLayout: 'grid' | 'single';
   alwaysOnTop: boolean;
@@ -48,7 +57,18 @@ function onChannel<T>(channel: string, cb: (payload: T) => void): () => void {
   };
 }
 
+function resolveColorEnv(): 'prod' | 'test' {
+  const v = process.env.PKG_RUNNER_COLOR_ENV?.trim().toLowerCase();
+  if (v === 'prod' || v === 'test') return v;
+  // 未注入时：userData 路径含 dev → test（避免 preload 读不到 main 写入的 env 时误落 prod）
+  const ud = process.env.PKG_RUNNER_USER_DATA || '';
+  if (/dev|test/i.test(ud)) return 'test';
+  return 'prod';
+}
+
 const api = {
+  /** Sync: set data-env before paint. Mirrors main PKG_RUNNER_COLOR_ENV. */
+  getColorEnv: (): 'prod' | 'test' => resolveColorEnv(),
   getInitialDir: (): Promise<string | null> =>
     ipcRenderer.invoke('pkg:get-initial-dir'),
   getProjects: (): Promise<ProjectsState> =>
@@ -60,6 +80,8 @@ const api = {
   removeProject: (dir: string): Promise<ProjectsState> =>
     ipcRenderer.invoke('pkg:remove-project', dir),
   pickDir: (): Promise<string | null> => ipcRenderer.invoke('pkg:pick-dir'),
+  pickWorkspace: (): Promise<ProjectsState> =>
+    ipcRenderer.invoke('pkg:pick-workspace'),
   loadProject: (dir: string): Promise<ProjectPayload> =>
     ipcRenderer.invoke('pkg:load', dir),
   runScript: (dir: string, scriptName: string): Promise<string> =>
@@ -96,6 +118,55 @@ const api = {
     ipcRenderer.invoke('pkg:open-logs-dir'),
   clearDiskLogs: (): Promise<{ ok: boolean; removed: number; dir: string }> =>
     ipcRenderer.invoke('pkg:clear-disk-logs'),
+  portsList: (): Promise<{
+    ok: boolean;
+    action: 'list';
+    ports: Array<{
+      port: number;
+      pid: number;
+      processName: string;
+      localAddress: string;
+      owner: 'self' | 'job' | 'shell' | 'unmanaged';
+      jobId?: string;
+      shellId?: string;
+    }>;
+    orphans: number;
+    error?: string;
+    at: string;
+  }> => ipcRenderer.invoke('pkg:ports-list'),
+  portsKill: (payload: {
+    port?: number | null;
+    pid?: number | null;
+  }): Promise<{
+    ok: boolean;
+    action: 'kill';
+    killed: Array<{
+      ok: boolean;
+      port?: number;
+      pid?: number;
+      processName?: string;
+      error?: string;
+    }>;
+    error?: string;
+    at: string;
+  }> => ipcRenderer.invoke('pkg:ports-kill', payload),
+  portsReap: (payload?: {
+    nodeOnly?: boolean;
+  }): Promise<{
+    ok: boolean;
+    action: 'reap';
+    nodeOnly: boolean;
+    killed: Array<{
+      ok: boolean;
+      port?: number;
+      pid?: number;
+      processName?: string;
+      error?: string;
+    }>;
+    skipped: unknown[];
+    error?: string;
+    at: string;
+  }> => ipcRenderer.invoke('pkg:ports-reap', payload || {}),
   openGlassLabs: (): Promise<void> =>
     ipcRenderer.invoke('pkg:open-glass-labs'),
   openGlassLab: (kind: string): Promise<void> =>
@@ -129,6 +200,8 @@ const api = {
   onRunning: (cb: (running: boolean) => void) =>
     onChannel<boolean>('pkg:running', cb),
   onJobs: (cb: (jobs: JobInfo[]) => void) => onChannel<JobInfo[]>('pkg:jobs', cb),
+  onStopping: (cb: (ids: string[]) => void) =>
+    onChannel<string[]>('pkg:stopping', cb),
   onExit: (
     cb: (payload: { id: string; scriptName: string; code: number | null }) => void,
   ) =>
@@ -139,6 +212,21 @@ const api = {
   onShellData: (cb: (payload: { id: string; data: string }) => void) =>
     onChannel<{ id: string; data: string }>('pkg:shell-data', cb),
   onOpenDir: (cb: (dir: string) => void) => onChannel<string>('pkg:open-dir', cb),
+  onFocusSession: (
+    cb: (payload: { id: string; dir: string | null }) => void,
+  ) => onChannel<{ id: string; dir: string | null }>('pkg:focus-session', cb),
+  onShellSession: (
+    cb: (payload: {
+      id: string;
+      dir: string;
+      cwd: string;
+      title: string;
+    }) => void,
+  ) =>
+    onChannel<{ id: string; dir: string; cwd: string; title: string }>(
+      'pkg:shell-session',
+      cb,
+    ),
   onSettings: (cb: (settings: SettingsPayload) => void) =>
     onChannel<SettingsPayload>('pkg:settings', cb),
   onPersistLogs: (cb: (enabled: boolean) => void) =>

@@ -5,7 +5,7 @@ const SEARCH_PREFIX = 'pkg-runner:search:';
 const PROJECT_SEARCH_KEY = 'pkg-runner:project-search';
 const SCRIPTS_WIDTH_KEY = 'pkg-runner:scripts-w';
 const GLASS_BLUR_KEY = 'pkg-runner:glass-blur';
-const DEFAULT_GLASS_ALPHA_PCT = 55;
+const DEFAULT_GLASS_ALPHA_PCT = 100;
 const DEFAULT_GLASS_BLUR_PX = 22;
 const MIN_GLASS_BLUR_PX = 0;
 const MAX_GLASS_BLUR_PX = 40;
@@ -553,7 +553,59 @@ function attachShellTerm(id, host) {
       });
       syncLogTabNav();
     }
+    const key = ev.key.toLowerCase();
+    const mod = ev.ctrlKey || ev.metaKey;
+    const copySel = () => {
+      const text = term.getSelection() || '';
+      if (!text) return false;
+      if (navigator.clipboard?.writeText) {
+        void navigator.clipboard.writeText(text);
+      } else {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        } catch {
+          /* ignore */
+        }
+      }
+      return true;
+    };
+    const pasteClip = () => {
+      if (!navigator.clipboard?.readText) return;
+      void navigator.clipboard.readText().then((text) => {
+        if (text && typeof api.shellWrite === 'function') void api.shellWrite(id, text);
+      });
+    };
+    // 有选区时 Ctrl/Cmd+C 复制，避免直接把 ^C 打进 PTY
+    if (key === 'c' && mod && !ev.altKey && (ev.shiftKey || term.hasSelection())) {
+      copySel();
+      return false;
+    }
+    if (key === 'insert' && mod && !ev.shiftKey && !ev.altKey && term.hasSelection()) {
+      copySel();
+      return false;
+    }
+    if (key === 'v' && mod && !ev.altKey) {
+      pasteClip();
+      return false;
+    }
+    if (key === 'insert' && ev.shiftKey && !mod && !ev.altKey) {
+      pasteClip();
+      return false;
+    }
     return true;
+  });
+  host.addEventListener('copy', (ev) => {
+    if (!term.hasSelection()) return;
+    const text = term.getSelection();
+    if (!text) return;
+    ev.preventDefault();
+    ev.clipboardData?.setData('text/plain', text);
   });
 
   const ro = new ResizeObserver(() => {
@@ -2056,6 +2108,20 @@ function applySettingsState(settings) {
   applyShellMosaicCols(appSettings.shellMosaicCols);
   syncShellLayoutSettingsUi();
   applyTheme(appSettings.theme);
+  // data-env 仅默认种子；设置里的主色调写 --tone（铺底 + 点缀皆由其派生）
+  if (typeof settings.brandColor === 'string' && settings.brandColor.trim()) {
+    const c = settings.brandColor.trim().toUpperCase();
+    const style = document.documentElement.style;
+    [
+      '--brand', '--brand-700', '--brand-680', '--brand-650', '--brand-620', '--brand-600',
+      '--brand-550', '--brand-500', '--brand-450', '--brand-420', '--brand-400',
+      '--brand-300', '--brand-200', '--brand-150', '--brand-100',
+      '--color-accent', '--color-accent-hover', '--color-accent-soft',
+      '--color-accent-soft-strong', '--color-accent-fill', '--color-accent-inset',
+      '--color-focus-ring', '--accent', '--accent-hover',
+    ].forEach((k) => style.removeProperty(k));
+    style.setProperty('--tone', c);
+  }
   if (alwaysOnTopCheck) alwaysOnTopCheck.checked = !!appSettings.alwaysOnTop;
   syncScreenshotHistoryLimitUi(appSettings.screenshotHistoryLimit);
   if (!recordingHotkeyKind) syncHotkeysUi();

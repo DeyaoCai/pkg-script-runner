@@ -8,6 +8,8 @@
  *   GET  /health
  *   POST /v1/flush-logs
  *   POST /v1/scripts   body: { action: 'start'|'restart'|'stop', script, dir? }
+ *   POST /v1/shell     body: { action: 'open'|'exec'|'close'|'list', dir?, command?, id? }
+ *   POST /v1/ports     body: { action: 'list'|'kill'|'reap', port?, pid?, nodeOnly? }
  *
  * 不用 npm bin、不靠文件 req/ack 轮询。
  */
@@ -18,6 +20,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { app } from 'electron';
 import { flushAllDiskLogs, type FlushDiskLogsResult } from './logSink.js';
+import type { PortsActionResult } from './portManager.js';
 
 /** 优先占用的本机端口；冲突则改用系统分配 */
 export const CONTROL_PREFERRED_PORT = 18765;
@@ -39,6 +42,44 @@ export type RunScriptResult = {
   wasRunning?: boolean;
   error?: string;
   at: string;
+};
+
+export type ShellControlAction = 'open' | 'exec' | 'close' | 'list';
+
+export type ShellControlRequest = {
+  action: ShellControlAction;
+  dir?: string | null;
+  command?: string | null;
+  id?: string | null;
+};
+
+export type ShellControlResult = {
+  ok: boolean;
+  action: ShellControlAction;
+  dir: string | null;
+  id?: string;
+  cwd?: string;
+  title?: string;
+  shells?: Array<{
+    id: string;
+    dir: string;
+    cwd: string;
+    title: string;
+    alive: boolean;
+  }>;
+  closed?: string[];
+  error?: string;
+  at: string;
+};
+
+export type PortsControlAction = 'list' | 'kill' | 'reap';
+
+export type PortsControlRequest = {
+  action: PortsControlAction;
+  port?: number | null;
+  pid?: number | null;
+  /** reap 默认 true：只清 Node/常见 dev server */
+  nodeOnly?: boolean;
 };
 
 export type ControlEndpointInfo = {
@@ -124,10 +165,86 @@ function parseRunScriptBody(raw: string): RunScriptRequest | { error: string } {
   return { action, script, dir };
 }
 
+function parseShellBody(raw: string): ShellControlRequest | { error: string } {
+  let parsed: unknown;
+  try {
+    parsed = raw ? JSON.parse(raw) : {};
+  } catch {
+    return { error: '请求不是合法 JSON' };
+  }
+  if (!parsed || typeof parsed !== 'object') return { error: '请求格式无效' };
+  const o = parsed as Record<string, unknown>;
+  const action = o.action;
+  if (
+    action !== 'open' &&
+    action !== 'exec' &&
+    action !== 'close' &&
+    action !== 'list'
+  ) {
+    return { error: 'action 须为 open | exec | close | list' };
+  }
+  const dir = typeof o.dir === 'string' && o.dir.trim() ? o.dir.trim() : null;
+  const command =
+    typeof o.command === 'string' && o.command.trim() ? o.command.trim() : null;
+  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : null;
+  if (action === 'exec' && !command) return { error: 'exec 需要 command' };
+  if (action === 'close' && !id && !dir) {
+    return { error: 'close 需要 id 或 dir' };
+  }
+  return { action, dir, command, id };
+}
+
+function parsePortsBody(raw: string): PortsControlRequest | { error: string } {
+  let parsed: unknown;
+  try {
+    parsed = raw ? JSON.parse(raw) : {};
+  } catch {
+    return { error: '请求不是合法 JSON' };
+  }
+  if (!parsed || typeof parsed !== 'object') return { error: '请求格式无效' };
+  const o = parsed as Record<string, unknown>;
+  const action = o.action;
+  if (action !== 'list' && action !== 'kill' && action !== 'reap') {
+    return { error: 'action 须为 list | kill | reap' };
+  }
+  const port =
+    typeof o.port === 'number'
+      ? o.port
+      : typeof o.port === 'string' && o.port.trim()
+        ? Number(o.port)
+        : null;
+  const pid =
+    typeof o.pid === 'number'
+      ? o.pid
+      : typeof o.pid === 'string' && o.pid.trim()
+        ? Number(o.pid)
+        : null;
+  if (action === 'kill') {
+    const hasPort = port != null && Number.isFinite(port) && port > 0;
+    const hasPid = pid != null && Number.isFinite(pid) && pid > 0;
+    if (!hasPort && !hasPid) return { error: 'kill 需要 port 或 pid' };
+  }
+  const nodeOnly = o.nodeOnly === undefined ? undefined : Boolean(o.nodeOnly);
+  return {
+    action,
+    port: port != null && Number.isFinite(port) ? port : null,
+    pid: pid != null && Number.isFinite(pid) ? pid : null,
+    nodeOnly,
+  };
+}
+
 export type ControlServerHandles = {
-  runScript: (req: RunScriptRequest) => Omit<RunScriptResult, 'at'>;
+  runScript: (
+    req: RunScriptRequest,
+  ) => Omit<RunScriptResult, 'at'> | Promise<Omit<RunScriptResult, 'at'>>;
+  runShell?: (req: ShellControlRequest) => Omit<ShellControlResult, 'at'>;
+  runPorts?: (
+    req: PortsControlRequest,
+  ) => PortsActionResult | Promise<PortsActionResult>;
   onFlushed?: (result: FlushDiskLogsResult) => void;
   onRunScript?: (result: RunScriptResult) => void;
+  onRunShell?: (result: ShellControlResult) => void;
+  onRunPorts?: (result: PortsActionResult) => void;
   applySettings?: (settings: unknown) => void;
   onToggleWindow?: () => void;
 };
@@ -257,7 +374,7 @@ export async function startControlServer(
         }
         let body: Omit<RunScriptResult, 'at'>;
         try {
-          body = handles.runScript(parsed);
+          body = await handles.runScript(parsed);
         } catch (err) {
           body = {
             ok: false,
@@ -269,6 +386,110 @@ export async function startControlServer(
         }
         const result: RunScriptResult = { ...body, at };
         handles.onRunScript?.(result);
+        sendJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/v1/shell') {
+        const at = new Date().toISOString();
+        if (!handles.runShell) {
+          sendJson(res, 501, {
+            ok: false,
+            action: 'open',
+            dir: null,
+            error: 'shell control 未启用',
+            at,
+          });
+          return;
+        }
+        const raw = await readBody(req);
+        const parsed = parseShellBody(raw);
+        if ('error' in parsed) {
+          const result: ShellControlResult = {
+            ok: false,
+            action: 'open',
+            dir: null,
+            error: parsed.error,
+            at,
+          };
+          handles.onRunShell?.(result);
+          sendJson(res, 400, result);
+          return;
+        }
+        let body: Omit<ShellControlResult, 'at'>;
+        try {
+          body = handles.runShell(parsed);
+        } catch (err) {
+          body = {
+            ok: false,
+            action: parsed.action,
+            dir: parsed.dir ?? null,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+        const result: ShellControlResult = { ...body, at };
+        handles.onRunShell?.(result);
+        sendJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/v1/ports') {
+        const at = new Date().toISOString();
+        if (!handles.runPorts) {
+          sendJson(res, 501, {
+            ok: false,
+            action: 'list',
+            ports: [],
+            orphans: 0,
+            error: 'ports control 未启用',
+            at,
+          });
+          return;
+        }
+        const raw = await readBody(req);
+        const parsed = parsePortsBody(raw);
+        if ('error' in parsed) {
+          const result: PortsActionResult = {
+            ok: false,
+            action: 'list',
+            ports: [],
+            orphans: 0,
+            error: parsed.error,
+            at,
+          };
+          handles.onRunPorts?.(result);
+          sendJson(res, 400, result);
+          return;
+        }
+        let result: PortsActionResult;
+        try {
+          result = await handles.runPorts(parsed);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (parsed.action === 'kill') {
+            result = { ok: false, action: 'kill', killed: [], error: msg, at };
+          } else if (parsed.action === 'reap') {
+            result = {
+              ok: false,
+              action: 'reap',
+              nodeOnly: parsed.nodeOnly !== false,
+              killed: [],
+              skipped: [],
+              error: msg,
+              at,
+            };
+          } else {
+            result = {
+              ok: false,
+              action: 'list',
+              ports: [],
+              orphans: 0,
+              error: msg,
+              at,
+            };
+          }
+        }
+        handles.onRunPorts?.(result);
         sendJson(res, result.ok ? 200 : 400, result);
         return;
       }

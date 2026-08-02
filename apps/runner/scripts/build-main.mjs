@@ -23,7 +23,7 @@ const shared = {
   sourcemap: dev,
   minify: !dev,
   packages: 'bundle',
-  external: ['electron', 'node-pty'],
+  external: ['electron', 'node-pty', 'koffi'],
 };
 
 await esbuild.build({

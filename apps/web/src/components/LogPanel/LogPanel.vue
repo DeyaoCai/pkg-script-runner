@@ -30,18 +30,24 @@
           v-for="s in app.visibleLogs"
           :key="s.id"
           class="log-tab"
-          :class="{ active: app.data.activeLogId === s.id, running: s.running }"
+          :class="{
+            active: app.data.activeLogId === s.id,
+            running: s.running,
+            stopping: s.stopping,
+          }"
           role="tab"
           :tabindex="app.data.activeLogId === s.id ? 0 : -1"
           :data-log-tab="s.id"
           :aria-selected="app.data.activeLogId === s.id"
-          :aria-label="s.title"
+          :aria-label="s.stopping ? `${s.title}（正在停止）` : s.title"
+          :aria-busy="s.stopping"
           @click="ctrl.selectTab(s.id)"
           @keydown="ctrl.onTabKeydown($event, s.id)"
         >
+          <span v-if="s.stopping" class="log-tab-spinner" aria-hidden="true" />
           <span class="log-tab-label">{{ s.title }}</span>
           <button
-            v-if="s.kind === 'job'"
+            v-if="s.kind === 'job' && !s.stopping"
             type="button"
             class="log-tab-restart"
             aria-label="重启"
@@ -51,7 +57,7 @@
             ↻
           </button>
           <button
-            v-if="!ctrl.isSystem(s.id) && s.running"
+            v-if="!ctrl.isSystem(s.id) && s.running && !s.stopping"
             type="button"
             class="log-tab-stop"
             aria-label="停止"
@@ -60,6 +66,13 @@
           >
             ■
           </button>
+          <span
+            v-else-if="!ctrl.isSystem(s.id) && s.stopping"
+            class="log-tab-stopping"
+            title="正在停止…"
+          >
+            停止中
+          </span>
           <button
             v-else-if="!ctrl.isSystem(s.id)"
             type="button"
@@ -81,17 +94,19 @@
       >
         +
       </button>
-      <span
+      <button
+        type="button"
         class="log-tab-layout"
         :data-layout="app.data.settings.shellLayout === 'grid' ? 'grid' : 'single'"
         :title="
           app.data.settings.shellLayout === 'grid'
-            ? 'Shell 布局：网格（在托盘设置中修改）'
-            : 'Shell 布局：单个（在托盘设置中修改）'
+            ? 'Shell 布局：网格（点击切换为单个）'
+            : 'Shell 布局：单个（点击切换为网格）'
         "
+        @click="ctrl.toggleShellLayout()"
       >
         {{ app.data.settings.shellLayout === 'grid' ? '网格' : '单个' }}
-      </span>
+      </button>
     </div>
 
     <div v-if="!ctrl.paneMode" class="log-views">
@@ -127,16 +142,18 @@
         :class="{
           'is-active': app.data.activeLogId === s.id,
           'is-running': s.running,
+          'is-stopping': s.stopping,
           'is-job-pane': s.kind === 'job',
         }"
         :data-log-id="s.id"
         @click="ctrl.selectTab(s.id)"
       >
         <div class="shell-pane-head">
-          <span class="shell-pane-title">{{ s.title }}</span>
+          <span v-if="s.stopping" class="log-tab-spinner" aria-hidden="true" />
+          <span class="shell-pane-title">{{ s.stopping ? `${s.title} · 停止中` : s.title }}</span>
           <div class="shell-pane-actions">
             <button
-              v-if="s.kind === 'job'"
+              v-if="s.kind === 'job' && !s.stopping"
               type="button"
               class="shell-pane-btn"
               title="重新运行"
@@ -146,7 +163,7 @@
               ↻
             </button>
             <button
-              v-if="s.running"
+              v-if="s.running && !s.stopping"
               type="button"
               class="shell-pane-btn"
               :title="s.kind === 'shell' ? '强制结束终端' : '停止此脚本'"
@@ -155,6 +172,7 @@
             >
               ■
             </button>
+            <span v-else-if="s.stopping" class="shell-pane-stopping" title="正在停止…">…</span>
             <button
               v-else
               type="button"

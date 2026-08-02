@@ -36,10 +36,17 @@ export class ScriptsPanelCtrl extends Controller<TData, TProps, TState> {
   isRunning(name: string): boolean {
     const dir = this.app.data.project?.dir;
     if (!dir) return false;
-    return !!this.app.findJob(dir, name);
+    return this.app.isScriptBusy(dir, name);
+  }
+
+  isStopping(name: string): boolean {
+    const dir = this.app.data.project?.dir;
+    if (!dir) return false;
+    return this.app.isScriptStopping(dir, name);
   }
 
   actionLabel(name: string): string {
+    if (this.isStopping(name)) return `正在停止 ${name}…`;
     return this.isRunning(name)
       ? `停止 ${name}（双击或 Enter）`
       : `运行 ${name}（双击或 Enter）`;

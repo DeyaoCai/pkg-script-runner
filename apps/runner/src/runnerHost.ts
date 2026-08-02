@@ -6,19 +6,24 @@ import {
   screen,
   shell,
 } from 'electron';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pty, { type IPty } from 'node-pty';
 import { loadProjectScripts, pmRunArgs } from './pkg.js';
+import { loadPrefs, sameDir, type Prefs } from './prefs.js';
 import {
-  loadPrefs,
-  savePrefs,
-  sameDir,
-  type Prefs,
-} from './prefs.js';
+  migrateLegacyRunnerProjects,
+  onWorkspacePrefsChange,
+  openWorkspaceDir,
+  pickWorkspaceDir,
+  readWorkspacePrefs,
+  selectWorkspaceRepo,
+  workspaceProjectsState,
+  activeScriptDir,
+} from '../../shared/workspaceSync.js';
 import {
   coerceSharedSettings,
   defaultSharedSettings,
@@ -43,6 +48,23 @@ import {
 } from './logSink.js';
 import { flushLogsNow, startControlServer } from './controlServer.js';
 import { diagLog, diagLogPath, readDiagTail } from './diagLog.js';
+import { pkgRunnerColorEnv, type PkgRunnerColorEnv } from './appProfile.js';
+import { resolveEnvAssetPath } from './appIcons.js';
+import {
+  killByPid,
+  killByPort,
+  killPidTree,
+  killPidTreeSync,
+  listClassifiedPorts,
+  reapUnmanagedPorts,
+  type PortsActionResult,
+} from './portManager.js';
+import {
+  lastSpawnInWinJobError,
+  spawnInWinJob,
+  tryOwnProcess,
+  type ProcessJob,
+} from './winProcessJob.js';
 
 export type RunnerHostMode = 'standalone' | 'embedded';
 
@@ -103,31 +125,73 @@ function panelPreload(): string {
 }
 
 async function loadMainWindow(win: BrowserWindow): Promise<void> {
-  const preferDev =
-    !!process.env.PKG_RUNNER_UI_URL?.trim() ||
-    !!process.env.VITE_DEV_SERVER_URL?.trim() ||
-    !app.isPackaged ||
-    process.env.PKG_RUNNER_UI_DEV === '1';
-  if (preferDev) {
+  const t0 = Date.now();
+  const uiUrl =
+    process.env.PKG_RUNNER_UI_URL?.trim() ||
+    process.env.VITE_DEV_SERVER_URL?.trim() ||
+    '';
+  const forceVite =
+    process.env.PKG_RUNNER_UI_DEV === '1' ||
+    process.env.PKG_RUNNER_UI_DEV === 'true';
+  // 仅显式要 Vite 时才探测；勿对所有 unpackaged 先 HEAD（无 Vite 会空等超时卡主机）
+  if (uiUrl || forceVite) {
+    const url = uiUrl || UI_DEV_URL;
     try {
-      const res = await fetch(UI_DEV_URL, { method: 'HEAD' });
+      const res = await fetch(url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(400),
+      });
       if (res.ok || res.status === 404) {
-        await win.loadURL(UI_DEV_URL);
+        await win.loadURL(url);
+        diagLog('runner', 'ui.load', {
+          via: 'vite',
+          url,
+          ms: Date.now() - t0,
+        });
         return;
       }
     } catch {
-      /* fall through to dist-ui / archived vanilla */
+      /* fall through to dist-ui */
     }
   }
   const distIndex = uiDistIndex();
   if (fs.existsSync(distIndex)) {
-    diagLog('runner', 'ui.load', { file: distIndex });
     await win.loadFile(distIndex);
+    diagLog('runner', 'ui.load', {
+      via: 'dist-ui',
+      file: distIndex,
+      ms: Date.now() - t0,
+    });
     return;
   }
+  // dist 没有时再试本地 Vite（仅 unpackaged；短超时，失败立刻 fallback）
+  if (!uiUrl && !forceVite && !app.isPackaged) {
+    try {
+      const res = await fetch(UI_DEV_URL, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(300),
+      });
+      if (res.ok || res.status === 404) {
+        await win.loadURL(UI_DEV_URL);
+        diagLog('runner', 'ui.load', {
+          via: 'vite-fallback',
+          url: UI_DEV_URL,
+          ms: Date.now() - t0,
+        });
+        return;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
   const vanilla = path.join(runnerAppRoot(), 'ui', 'index.vanilla.html');
-  diagLog('runner', 'ui.load.fallback', { file: vanilla, missingDist: distIndex });
   await win.loadFile(vanilla);
+  diagLog('runner', 'ui.load.fallback', {
+    via: 'vanilla',
+    file: vanilla,
+    missingDist: distIndex,
+    ms: Date.now() - t0,
+  });
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -135,6 +199,8 @@ let initialDir: string | null = null;
 let isQuitting = false;
 /** 本机 HTTP 控制面 stop 钩子 */
 let stopControlServer: (() => void) | null = null;
+/** 控制面实际监听端口（分类 self 用） */
+let controlListenPort: number | null = null;
 let prefs: Prefs = {
   projects: [],
   activeProject: null,
@@ -145,13 +211,14 @@ let shared: SharedSettings = defaultSharedSettings();
 let traySettingsReceived = false;
 
 /** Keep in sync with ui/tokens.css --neutral-850 / --neutral-50 (= --color-bg-base). */
-const WINDOW_BG = {
-  dark: '#1b1d21',
-  light: '#f4f5f7',
-} as const;
+const WINDOW_BG: Record<PkgRunnerColorEnv, { dark: string; light: string }> = {
+  prod: { dark: '#1b1d21', light: '#f4f5f7' },
+  test: { dark: '#3d1c0a', light: '#f7f0ea' },
+};
 
 function windowBackgroundForTheme(theme: 'dark' | 'light'): string {
-  return theme === 'light' ? WINDOW_BG.light : WINDOW_BG.dark;
+  const bg = WINDOW_BG[pkgRunnerColorEnv()];
+  return theme === 'light' ? bg.light : bg.dark;
 }
 
 type GlassLabKind = 'acrylic' | 'mica' | 'tabbed' | 'acrylic-clip' | 'css-only';
@@ -205,6 +272,8 @@ type RunJob = {
   dir: string;
   scriptName: string;
   proc: ChildProcess;
+  /** Win Job Object：启动时圈养整树；停时 Terminate，无需 wmic 侦察 */
+  processJob: ProcessJob | null;
 };
 
 const jobs = new Map<string, RunJob>();
@@ -236,9 +305,13 @@ function jobsSnapshot(): Array<{ id: string; dir: string; scriptName: string }> 
 
 function syncJobsUi() {
   const list = jobsSnapshot();
+  const stopping = [...stoppingJobs];
   send('pkg:jobs', list);
+  send('pkg:stopping', stopping);
   const busy =
-    list.length > 0 || [...shells.values()].some((s) => s.pty != null);
+    list.length > 0 ||
+    stopping.length > 0 ||
+    [...shells.values()].some((s) => s.pty != null);
   send('pkg:running', busy);
 }
 
@@ -256,51 +329,202 @@ function sendShellData(id: string, data: string) {
   send('pkg:shell-data', { id, data });
 }
 
-/** 强杀进程树；Windows 用同步 taskkill，避免退出时还没杀完就退了 */
-function killProc(proc: ChildProcess) {
+/** 正在异步杀掉的 job（已从 jobs 摘掉，禁止立刻同 key 再 start） */
+const stoppingJobs = new Set<string>();
+const pendingKills = new Map<string, Promise<void>>();
+
+/**
+ * 停脚本：优先 Job Object（O(1)）；否则单次 taskkill /T。
+ * 不再做 wmic BFS / 全机 node 扫。
+ */
+function killProc(
+  proc: ChildProcess,
+  opts?: {
+    sync?: boolean;
+    trackKey?: string;
+    processJob?: ProcessJob | null;
+  },
+): Promise<void> {
   const pid = proc.pid;
-  if (!pid) return;
-  try {
-    if (process.platform === 'win32') {
-      spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true,
-        timeout: 8000,
-      });
-      return;
-    }
+  if (!pid) {
+    diagLog('runner', 'kill.skip', { reason: 'no-pid' });
+    return Promise.resolve();
+  }
+
+  const finishProc = () => {
     try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      /* already gone */
-    }
-    try {
-      if (!proc.killed) proc.kill('SIGKILL');
+      proc.kill();
     } catch {
       /* ignore */
     }
-  } catch {
-    /* ignore */
+  };
+
+  const runJobObject = (): boolean => {
+    const job = opts?.processJob;
+    if (!job?.assigned) return false;
+    const t0 = Date.now();
+    const ok = job.terminate();
+    // 关句柄：Terminate 失败时靠 KILL_ON_JOB_CLOSE 仍清树
+    job.close();
+    diagLog('runner', 'kill.job', {
+      via: 'job-object',
+      rootPid: pid,
+      ok,
+      ms: Date.now() - t0,
+    });
+    finishProc();
+    return true;
+  };
+
+  if (opts?.sync) {
+    if (!runJobObject()) {
+      const result = killPidTreeSync(pid);
+      diagLog('runner', 'kill.tree.sync', result);
+      finishProc();
+    }
+    return Promise.resolve();
   }
+
+  const run = (async () => {
+    try {
+      if (runJobObject()) return;
+      const result = await killPidTree(pid);
+      diagLog('runner', 'kill.tree', result);
+      finishProc();
+    } catch (err) {
+      diagLog('runner', 'kill.fail', {
+        pid,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  })();
+
+  const key = opts?.trackKey;
+  if (key) {
+    stoppingJobs.add(key);
+    pendingKills.set(key, run);
+    syncJobsUi();
+    void run.finally(() => {
+      stoppingJobs.delete(key);
+      if (pendingKills.get(key) === run) pendingKills.delete(key);
+      syncJobsUi();
+    });
+  }
+  return run;
 }
 
-function stopJob(id: string, reason = '已停止') {
+function managedPortRoots(): {
+  jobs: Array<{ id: string; pid: number }>;
+  shells: Array<{ id: string; pid: number }>;
+} {
+  return {
+    jobs: [...jobs.values()]
+      .map((j) => ({ id: j.id, pid: j.proc.pid ?? 0 }))
+      .filter((j) => j.pid > 0),
+    shells: [...shells.values()]
+      .map((s) => ({ id: s.id, pid: s.pty?.pid ?? 0 }))
+      .filter((s) => s.pid > 0),
+  };
+}
+
+function classifyCtx() {
+  const roots = managedPortRoots();
+  return {
+    jobs: roots.jobs,
+    shells: roots.shells,
+    controlPort: controlListenPort,
+    selfPids: [process.pid],
+  };
+}
+
+async function listPortsFromControl(): Promise<PortsActionResult> {
+  return listClassifiedPorts(classifyCtx());
+}
+
+async function killPortFromControl(req: {
+  port?: number | null;
+  pid?: number | null;
+}): Promise<PortsActionResult> {
+  const at = new Date().toISOString();
+  const port = req.port != null ? Number(req.port) : NaN;
+  const pid = req.pid != null ? Number(req.pid) : NaN;
+  if (Number.isFinite(port) && port > 0) {
+    const killed = [await killByPort(port)];
+    return {
+      ok: killed.every((k) => k.ok),
+      action: 'kill',
+      killed,
+      error: killed.find((k) => !k.ok)?.error,
+      at,
+    };
+  }
+  if (Number.isFinite(pid) && pid > 0) {
+    const killed = [await killByPid(pid)];
+    return {
+      ok: killed.every((k) => k.ok),
+      action: 'kill',
+      killed,
+      error: killed.find((k) => !k.ok)?.error,
+      at,
+    };
+  }
+  return {
+    ok: false,
+    action: 'kill',
+    killed: [],
+    error: 'kill 需要 port 或 pid',
+    at,
+  };
+}
+
+async function reapPortsFromControl(opts?: {
+  nodeOnly?: boolean;
+}): Promise<PortsActionResult> {
+  return reapUnmanagedPorts(classifyCtx(), opts);
+}
+
+function stopJob(id: string, reason = '已停止', opts?: { syncKill?: boolean }) {
   const job = jobs.get(id);
   if (!job) return false;
   jobs.delete(id);
-  killProc(job.proc);
+  // 先标记 stopping 再推 UI，避免「已从 jobs 消失但还在杀」中间态无  if (!opts?.syncKill) stoppingJobs.add(id);
   appendJobLog(id, job.scriptName, job.dir, `\n[${reason}]\n`);
   syncJobsUi();
+  void killProc(job.proc, {
+    sync: opts?.syncKill,
+    trackKey: opts?.syncKill ? undefined : id,
+    processJob: job.processJob,
+  });
   return true;
 }
 
-function stopAllJobs(reason = '已全部停止') {
+async function stopJobAwait(id: string, reason = '已停止'): Promise<boolean> {
+  const job = jobs.get(id);
+  if (!job) {
+    const pending = pendingKills.get(id);
+    if (pending) await pending;
+    return !!pending;
+  }
+  jobs.delete(id);
+  stoppingJobs.add(id);
+  appendJobLog(id, job.scriptName, job.dir, `\n[${reason}]\n`);
+  syncJobsUi();
+  await killProc(job.proc, { trackKey: id, processJob: job.processJob });
+  return true;
+}
+
+function stopAllJobs(reason = '已全部停止', opts?: { syncKill?: boolean }) {
   if (jobs.size === 0) return;
   const list = [...jobs.values()];
   jobs.clear();
   for (const job of list) {
-    killProc(job.proc);
+    if (!opts?.syncKill) stoppingJobs.add(job.id);
     appendJobLog(job.id, job.scriptName, job.dir, `\n[${reason}]\n`);
+    void killProc(job.proc, {
+      sync: opts?.syncKill,
+      trackKey: opts?.syncKill ? undefined : job.id,
+      processJob: job.processJob,
+    });
   }
   appendSystemLog(`\n[${reason} · ${list.length} 个任务]\n`);
   syncJobsUi();
@@ -314,26 +538,25 @@ function defaultPtyShell(): { file: string; args: string[] } {
   return { file: sh, args: [] };
 }
 
-function killShellPty(session: ShellSession) {
+function killShellPty(session: ShellSession, opts?: { sync?: boolean }) {
   const term = session.pty;
   if (!term) return;
   session.pty = null;
-  const pid = term.pid;
+  const shellPid = term.pid;
+  // shell/pty：暂无 /T（未挂 Job）；脚本任务走 Job Object
+  if (shellPid) {
+    if (opts?.sync) {
+      diagLog('runner', 'kill.shell-tree.sync', killPidTreeSync(shellPid));
+    } else {
+      void killPidTree(shellPid).then((r) => {
+        diagLog('runner', 'kill.shell-tree', r);
+      });
+    }
+  }
   try {
     term.kill();
   } catch {
     /* ignore */
-  }
-  if (pid && process.platform === 'win32') {
-    try {
-      spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true,
-        timeout: 8000,
-      });
-    } catch {
-      /* ignore */
-    }
   }
 }
 
@@ -459,11 +682,14 @@ function closeAllShellSessions() {
   syncJobsUi();
 }
 
-/** 退出前：脚本 job + Shell 当前命令 + Shell 会话全部收掉 */
+/** 退出前：脚本 job + Shell 全部同步杀干净 */
 function stopAllAssociatedProcesses(reason = '退出前停止') {
-  stopAllJobs(reason);
-  stopAllShellCommands();
-  closeAllShellSessions();
+  stopAllJobs(reason, { syncKill: true });
+  for (const session of [...shells.values()]) {
+    killShellPty(session, { sync: true });
+    shells.delete(session.id);
+  }
+  syncJobsUi();
 }
 
 function closeShellSession(id: string): boolean {
@@ -477,8 +703,12 @@ function closeShellSession(id: string): boolean {
 
 function startJob(dir: string, scriptName: string): string {
   const key = jobKey(dir, scriptName);
-  if (jobs.has(key)) {
-    throw new Error(`脚本已在运行：${scriptName}`);
+  if (jobs.has(key) || stoppingJobs.has(key)) {
+    throw new Error(
+      stoppingJobs.has(key)
+        ? `脚本正在停止：${scriptName}（稍后再 start / 用 restart）`
+        : `脚本已在运行：${scriptName}`,
+    );
   }
   const project = loadProjectScripts(dir);
   const { cmd, args, shell } = pmRunArgs(project.packageManager, scriptName);
@@ -486,14 +716,65 @@ function startJob(dir: string, scriptName: string): string {
 
   appendJobLog(id, scriptName, project.dir, `$ ${cmd} ${args.join(' ')}\n`);
 
-  const proc = spawn(cmd, args, {
+  const env = { ...process.env, FORCE_COLOR: '1', npm_config_color: 'always' };
+  const tOwn = Date.now();
+
+  // Win：BREAKAWAY CreateProcess 入 Job（绕开 Electron 自带 Job）；失败再 spawn+Assign
+  let proc: ChildProcess;
+  let processJob: ProcessJob | null = null;
+  let ownVia: string = 'fallback-taskkill-T';
+  let ownErr: number | undefined;
+  let ownStage: string | undefined;
+
+  const broken = spawnInWinJob({
+    cmd,
+    args,
     cwd: project.dir,
+    env,
     shell,
-    env: { ...process.env, FORCE_COLOR: '1', npm_config_color: 'always' },
-    windowsHide: true,
+  });
+  if (broken) {
+    proc = broken.proc;
+    processJob = broken.processJob;
+    ownVia = 'job-object-breakaway';
+  } else {
+    const spawnFail = lastSpawnInWinJobError();
+    if (spawnFail) {
+      ownErr = spawnFail.err;
+      ownStage = `breakaway:${spawnFail.stage}`;
+    }
+    proc = spawn(cmd, args, {
+      cwd: project.dir,
+      shell,
+      env,
+      windowsHide: true,
+    });
+    if (proc.pid != null) {
+      const owned = tryOwnProcess(proc.pid);
+      processJob = owned.job;
+      if (!processJob) {
+        ownErr = owned.err ?? ownErr;
+        ownStage = owned.stage
+          ? `assign:${owned.stage}`
+          : ownStage;
+      } else {
+        ownVia = 'job-object-assign';
+        ownErr = undefined;
+        ownStage = undefined;
+      }
+    }
+  }
+
+  diagLog('runner', 'job.own', {
+    id,
+    rootPid: proc.pid ?? null,
+    via: ownVia,
+    err: ownErr,
+    stage: ownStage,
+    ms: Date.now() - tOwn,
   });
 
-  const job: RunJob = { id, dir: project.dir, scriptName, proc };
+  const job: RunJob = { id, dir: project.dir, scriptName, proc, processJob };
   jobs.set(id, job);
   syncJobsUi();
 
@@ -507,14 +788,15 @@ function startJob(dir: string, scriptName: string): string {
     const current = jobs.get(id);
     if (current?.proc === proc) {
       jobs.delete(id);
+      current.processJob?.close();
       appendJobLog(id, scriptName, project.dir, `\n[启动失败] ${err.message}\n`);
       closeJobDiskLog(id);
       syncJobsUi();
       send('pkg:exit', { id, scriptName, code: null });
       return;
     }
+    processJob?.close();
     if (current && current.proc !== proc) return;
-    // 已被 stopJob 摘掉
     syncJobsUi();
     send('pkg:exit', { id, scriptName, code: null });
   });
@@ -522,14 +804,16 @@ function startJob(dir: string, scriptName: string): string {
     const current = jobs.get(id);
     if (current?.proc === proc) {
       jobs.delete(id);
+      current.processJob?.close();
       appendJobLog(id, scriptName, project.dir, `\n[退出码 ${code ?? '?'}]\n`);
       closeJobDiskLog(id);
       syncJobsUi();
       send('pkg:exit', { id, scriptName, code });
       return;
     }
+    // stop 路径已 terminate+close；若仍持有未关句柄则补关
+    if (!current) processJob?.close();
     if (current && current.proc !== proc) return;
-    // 已被 stopJob / CLI 摘掉，勿重开落盘
     syncJobsUi();
     send('pkg:exit', { id, scriptName, code });
   });
@@ -545,17 +829,226 @@ function resolveRunScriptDir(dirHint?: string | null): string {
     }
     return resolved;
   }
-  if (prefs.activeProject) return prefs.activeProject;
-  if (prefs.projects.length === 1) return prefs.projects[0]!;
-  throw new Error('未指定项目目录，且没有唯一激活项目（请传 dir 或在 UI 激活项目）');
+  const active = activeScriptDir(readWorkspacePrefs());
+  if (active) return active;
+  throw new Error('未指定项目目录，且没有激活仓库（请先选择工作区/仓库）');
 }
 
-/** 供 CLI / control 桥：start | restart | stop */
-function runScriptFromControl(req: {
+/** 控制面 / CLI → 客户端：激活项目并可选亮窗 */
+function linkClientToProject(dir: string, opts?: { showWindow?: boolean }): void {
+  try {
+    addAndActivateProject(dir);
+  } catch {
+    /* ignore */
+  }
+  send('pkg:open-dir', dir);
+  persistProjectsBroadcast();
+  if (opts?.showWindow) showWindow();
+}
+
+function focusSession(id: string, dir: string | null, opts?: { showWindow?: boolean }): void {
+  send('pkg:focus-session', { id, dir });
+  if (opts?.showWindow) showWindow();
+}
+
+function notifyShellSession(info: {
+  id: string;
+  dir: string;
+  cwd: string;
+  title: string;
+}): void {
+  send('pkg:shell-session', info);
+}
+
+/** 该项目最近一个仍存活的交互 Shell */
+function findShellForProject(dir: string): ShellSession | null {
+  const resolved = path.resolve(dir);
+  let hit: ShellSession | null = null;
+  for (const s of shells.values()) {
+    if (!s.pty) continue;
+    if (sameDir(s.projectDir, resolved)) hit = s;
+  }
+  return hit;
+}
+
+function listShellSessions(dirHint?: string | null): Array<{
+  id: string;
+  dir: string;
+  cwd: string;
+  title: string;
+  alive: boolean;
+}> {
+  const filter = dirHint && String(dirHint).trim() ? path.resolve(String(dirHint).trim()) : null;
+  const out: Array<{
+    id: string;
+    dir: string;
+    cwd: string;
+    title: string;
+    alive: boolean;
+  }> = [];
+  for (const s of shells.values()) {
+    if (filter && !sameDir(s.projectDir, filter)) continue;
+    out.push({
+      id: s.id,
+      dir: s.projectDir,
+      cwd: s.cwd,
+      title: s.title,
+      alive: !!s.pty,
+    });
+  }
+  return out;
+}
+
+type ShellControlAction = 'open' | 'exec' | 'close' | 'list';
+
+type ShellControlResult = {
+  ok: boolean;
+  action: ShellControlAction;
+  dir: string | null;
+  id?: string;
+  cwd?: string;
+  title?: string;
+  shells?: Array<{
+    id: string;
+    dir: string;
+    cwd: string;
+    title: string;
+    alive: boolean;
+  }>;
+  closed?: string[];
+  error?: string;
+};
+
+/** 供控制面：自由命令进项目 Shell */
+function shellFromControl(req: {
+  action: ShellControlAction;
+  dir?: string | null;
+  command?: string | null;
+  id?: string | null;
+}): ShellControlResult {
+  const action = req.action;
+  try {
+    if (action === 'list') {
+      const dir = req.dir?.trim() ? path.resolve(req.dir.trim()) : null;
+      return {
+        ok: true,
+        action: 'list',
+        dir,
+        shells: listShellSessions(dir),
+      };
+    }
+
+    if (action === 'close') {
+      const id = req.id?.trim() || '';
+      if (id) {
+        const ok = closeShellSession(id);
+        if (ok) send('pkg:exit', { id, scriptName: 'Shell', code: null });
+        return {
+          ok,
+          action: 'close',
+          dir: null,
+          id,
+          closed: ok ? [id] : [],
+          error: ok ? undefined : `Shell 不存在：${id}`,
+        };
+      }
+      const dir = resolveRunScriptDir(req.dir);
+      const closed: string[] = [];
+      for (const s of [...shells.values()]) {
+        if (!sameDir(s.projectDir, dir)) continue;
+        if (closeShellSession(s.id)) {
+          closed.push(s.id);
+          send('pkg:exit', { id: s.id, scriptName: s.title, code: null });
+        }
+      }
+      linkClientToProject(dir, { showWindow: false });
+      return { ok: true, action: 'close', dir, closed };
+    }
+
+    if (action === 'open') {
+      const dir = resolveRunScriptDir(req.dir);
+      const info = openShellSession(dir);
+      linkClientToProject(dir, { showWindow: true });
+      notifyShellSession(info);
+      focusSession(info.id, info.dir, { showWindow: true });
+      return {
+        ok: true,
+        action: 'open',
+        dir: info.dir,
+        id: info.id,
+        cwd: info.cwd,
+        title: info.title,
+      };
+    }
+
+    if (action === 'exec') {
+      const command = String(req.command || '').trim();
+      if (!command) {
+        return {
+          ok: false,
+          action: 'exec',
+          dir: req.dir ?? null,
+          error: '缺少 command',
+        };
+      }
+      const dir = resolveRunScriptDir(req.dir);
+      let session = findShellForProject(dir);
+      let info: { id: string; dir: string; cwd: string; title: string };
+      if (session) {
+        info = {
+          id: session.id,
+          dir: session.projectDir,
+          cwd: session.cwd,
+          title: session.title,
+        };
+      } else {
+        info = openShellSession(dir);
+        notifyShellSession(info);
+      }
+      const payload = /[\r\n]$/.test(command) ? command : `${command}\r`;
+      if (!writeShellSession(info.id, payload)) {
+        return {
+          ok: false,
+          action: 'exec',
+          dir: info.dir,
+          id: info.id,
+          error: 'Shell 已退出，无法写入',
+        };
+      }
+      linkClientToProject(dir, { showWindow: true });
+      focusSession(info.id, info.dir, { showWindow: true });
+      return {
+        ok: true,
+        action: 'exec',
+        dir: info.dir,
+        id: info.id,
+        cwd: info.cwd,
+        title: info.title,
+      };
+    }
+
+    return {
+      ok: false,
+      action,
+      dir: req.dir ?? null,
+      error: 'action 须为 open | exec | close | list',
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      action,
+      dir: req.dir ?? null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** 供 CLI / control 桥：start | restart | stop（命名 npm script） */
+async function runScriptFromControl(req: {
   action: 'start' | 'restart' | 'stop';
   script: string;
   dir?: string | null;
-}): {
+}): Promise<{
   ok: boolean;
   action: 'start' | 'restart' | 'stop';
   script: string;
@@ -563,7 +1056,7 @@ function runScriptFromControl(req: {
   jobId?: string;
   wasRunning?: boolean;
   error?: string;
-} {
+}> {
   const script = String(req.script || '').trim();
   if (!script) {
     return {
@@ -588,10 +1081,10 @@ function runScriptFromControl(req: {
       };
     }
     const key = jobKey(project.dir, script);
-    const wasRunning = jobs.has(key);
+    const wasRunning = jobs.has(key) || stoppingJobs.has(key);
 
     if (req.action === 'stop') {
-      if (!wasRunning) {
+      if (!jobs.has(key) && !stoppingJobs.has(key)) {
         return {
           ok: true,
           action: 'stop',
@@ -600,30 +1093,28 @@ function runScriptFromControl(req: {
           wasRunning: false,
         };
       }
-      stopJob(key, 'CLI 停止');
+      // 等杀完再返回，CLI/控制面才知道端口已释放
+      await stopJobAwait(key, 'CLI 停止');
       closeJobDiskLog(key);
+      focusSession(key, project.dir, { showWindow: false });
       return {
         ok: true,
         action: 'stop',
         script,
         dir: project.dir,
+        jobId: key,
         wasRunning: true,
       };
     }
 
     if (req.action === 'restart') {
-      if (wasRunning) {
-        stopJob(key, 'CLI 重启前停止');
+      if (jobs.has(key) || stoppingJobs.has(key)) {
+        await stopJobAwait(key, 'CLI 重启前停止');
         closeJobDiskLog(key);
       }
       const jobId = startJob(project.dir, script);
-      // 确保项目在列表中并激活，便于 UI 对上
-      try {
-        addAndActivateProject(project.dir);
-      } catch {
-        /* ignore */
-      }
-      send('pkg:open-dir', project.dir);
+      linkClientToProject(project.dir, { showWindow: true });
+      focusSession(jobId, project.dir, { showWindow: true });
       return {
         ok: true,
         action: 'restart',
@@ -636,22 +1127,20 @@ function runScriptFromControl(req: {
 
     // start
     if (wasRunning) {
+      focusSession(key, project.dir, { showWindow: true });
       return {
         ok: false,
         action: 'start',
         script,
         dir: project.dir,
+        jobId: key,
         wasRunning: true,
         error: `脚本已在运行：${script}（可用 restart）`,
       };
     }
     const jobId = startJob(project.dir, script);
-    try {
-      addAndActivateProject(project.dir);
-    } catch {
-      /* ignore */
-    }
-    send('pkg:open-dir', project.dir);
+    linkClientToProject(project.dir, { showWindow: true });
+    focusSession(jobId, project.dir, { showWindow: true });
     return {
       ok: true,
       action: 'start',
@@ -699,9 +1188,8 @@ function broadcastUiSnapshot(): void {
 
 function scheduleUiSnapshotBroadcast(): void {
   broadcastUiSnapshot();
-  for (const ms of [50, 200, 600, 1500]) {
-    setTimeout(broadcastUiSnapshot, ms);
-  }
+  // 渲染进程 mount 可能略晚于 did-finish-load；补一次即可，勿连发拖主进程
+  setTimeout(broadcastUiSnapshot, 120);
 }
 
 function lookLikeDirArg(raw: string): boolean {
@@ -747,6 +1235,16 @@ function showWindow() {
 
 function hideWindow() {
   mainWindow?.hide();
+}
+
+/** 始终显示（设置页「打开」等，不切换隐藏） */
+export function showRunnerWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  diagLog('runner', 'window.show');
+  showWindow();
 }
 
 /** 显示 ↔ 隐藏（热键 / 托盘单击） */
@@ -837,6 +1335,7 @@ function applySharedToRuntime(next: SharedSettings): void {
   if (themeChanged && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setBackgroundColor(windowBackgroundForTheme(shared.theme));
   }
+  // brandColor 只走渲染进程 CSS；icon / 标题跟运行环境，不随拾色器改
   if (pinChanged) applyPinChrome();
   if (logsChanged) {
     setPersistLogs(shared.persistLogs);
@@ -863,101 +1362,53 @@ function applySettingsFromTray(raw: unknown): void {
   applySharedToRuntime(next);
 }
 
-function waitForTraySettings(timeoutMs: number): Promise<void> {
-  if (traySettingsReceived) return Promise.resolve();
+/** 轻量拉一次托盘配置；无托盘则立刻放弃，不再 50ms/180ms 轮询打盘 */
+async function waitForTraySettings(timeoutMs: number): Promise<void> {
+  if (traySettingsReceived) return;
   if (hostMode === 'embedded' && getSharedSettingsFn) {
     applySettingsFromTray(getSharedSettingsFn());
     diagLog('runner', 'settings.wait.done', { received: traySettingsReceived, via: 'embedded' });
-    return Promise.resolve();
+    return;
+  }
+  if (timeoutMs <= 0) {
+    diagLog('runner', 'settings.wait.done', { received: false, via: 'skip' });
+    return;
   }
   diagLog('runner', 'settings.wait.start', { timeoutMs });
-  return pullSettingsFromTray(Math.min(900, timeoutMs)).then((raw) => {
-    if (raw) applySettingsFromTray(raw);
-    if (traySettingsReceived) {
-      diagLog('runner', 'settings.wait.done', { received: true, via: 'pull' });
-      return;
-    }
-    return new Promise<void>((resolve) => {
-      const started = Date.now();
-      const tick = () => {
-        requestTrayPublishSettings();
-        if (traySettingsReceived || Date.now() - started >= timeoutMs) {
-          diagLog('runner', 'settings.wait.done', {
-            received: traySettingsReceived,
-            elapsedMs: Date.now() - started,
-            via: traySettingsReceived ? 'push' : 'none',
-          });
-          if (!traySettingsReceived) {
-            appendSystemLog(
-              '\n[配置] 未从托盘同步（请先 pnpm dev:tray；Runner 未启动不影响托盘读写配置）\n',
-            );
-          }
-          resolve();
-          return;
-        }
-        setTimeout(tick, 180);
-      };
-      tick();
-    });
+  const raw = await pullSettingsFromTray(Math.min(280, timeoutMs));
+  if (raw) applySettingsFromTray(raw);
+  diagLog('runner', 'settings.wait.done', {
+    received: traySettingsReceived,
+    via: traySettingsReceived ? 'pull' : 'none',
   });
-}
-
-function projectEntry(dir: string): { dir: string; name: string; scriptCount: number } {
-  try {
-    const p = loadProjectScripts(dir);
-    return { dir: p.dir, name: p.name, scriptCount: p.scripts.length };
-  } catch {
-    const resolved = path.resolve(dir);
-    return { dir: resolved, name: path.basename(resolved), scriptCount: 0 };
-  }
+  // 托盘稍后可通过 POST /v1/settings 推送；standalone 无托盘时不刷屏、不空转轮询
 }
 
 function projectsState() {
-  return {
-    projects: prefs.projects.map(projectEntry),
-    activeProject: prefs.activeProject,
-  };
+  return workspaceProjectsState();
 }
 
-function persistProjects() {
-  savePrefs(prefs);
+function persistProjectsBroadcast(): void {
   send('pkg:projects', projectsState());
 }
 
-/** 加入项目列表并激活；已存在则仅激活 */
+/** 打开目录为工作区（或工作区内仓库），与 Code Editor 共用 prefs */
 function addAndActivateProject(dir: string): { dir: string; name: string } {
-  const loaded = loadProjectScripts(dir);
-  const existing = prefs.projects.find((p) => sameDir(p, loaded.dir));
-  if (!existing) {
-    prefs.projects.push(loaded.dir);
-  } else {
-    // 规范化路径
-    const idx = prefs.projects.findIndex((p) => sameDir(p, loaded.dir));
-    if (idx >= 0) prefs.projects[idx] = loaded.dir;
-  }
-  prefs.activeProject = loaded.dir;
-  persistProjects();
-  return { dir: loaded.dir, name: loaded.name };
+  const state = openWorkspaceDir(dir);
+  const active = state.activeProject || state.workspaceRoot;
+  if (!active) throw new Error('无法打开工作区');
+  const hit = state.projects.find((p) => sameDir(p.dir, active));
+  return { dir: active, name: hit?.name || path.basename(active) };
 }
 
 function setActiveProject(dir: string | null) {
-  if (!dir) {
-    prefs.activeProject = null;
-    persistProjects();
-    return;
-  }
-  const hit = prefs.projects.find((p) => sameDir(p, dir));
-  if (!hit) throw new Error('项目不在列表中');
-  prefs.activeProject = hit;
-  persistProjects();
+  if (!dir) return;
+  selectWorkspaceRepo(dir);
 }
 
-function removeProject(dir: string) {
-  prefs.projects = prefs.projects.filter((p) => !sameDir(p, dir));
-  if (prefs.activeProject && sameDir(prefs.activeProject, dir)) {
-    prefs.activeProject = prefs.projects[0] ?? null;
-  }
-  persistProjects();
+function removeProject(_dir: string) {
+  // 工作区模型下不再「从列表移除」仓库；保留 API 兼容，广播当前状态即可
+  persistProjectsBroadcast();
 }
 
 async function openLogsDir(): Promise<{ ok: boolean; dir: string; error: string | null }> {
@@ -1143,12 +1594,15 @@ function closeGlassLabs() {
 }
 
 function createWindow() {
+  const colorEnv = pkgRunnerColorEnv();
+  const appIcon = resolveEnvAssetPath(runnerAppRoot(), 'icon');
   mainWindow = new BrowserWindow({
     width: 900,
     height: 520,
     minWidth: 900,
     minHeight: 520,
-    title: 'Pkg Runner',
+    title: colorEnv === 'test' ? 'Pkg Runner · 测试' : 'Pkg Runner',
+    icon: appIcon,
     show: false,
     frame: false,
     transparent: false,
@@ -1160,6 +1614,11 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
     },
+  });
+  diagLog('runner', 'window.icon', {
+    env: colorEnv,
+    file: path.basename(appIcon),
+    path: appIcon,
   });
 
   mainWindow.webContents.on('preload-error', (_e, preloadPath, error) => {
@@ -1227,6 +1686,19 @@ function registerIpc() {
     return projectsState();
   });
 
+  /** 选择工作区目录（与 Editor「选择工作区」同源） */
+  ipcMain.handle('pkg:pick-workspace', async (e) => {
+    const win = winFromEvent(e) || mainWindow;
+    if (!win) return projectsState();
+    const r = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory'],
+      title: '选择工作区目录',
+    });
+    if (r.canceled || !r.filePaths[0]) return projectsState();
+    pickWorkspaceDir(r.filePaths[0]);
+    return projectsState();
+  });
+
   ipcMain.handle('pkg:window-minimize', (e) => {
     winFromEvent(e)?.minimize();
   });
@@ -1290,6 +1762,8 @@ function registerIpc() {
 
 
 
+  ipcMain.handle('pkg:get-color-env', (): PkgRunnerColorEnv => pkgRunnerColorEnv());
+
   ipcMain.handle('pkg:get-settings', () => {
     if (!traySettingsReceived) {
       diagLog('runner', 'ipc.get-settings.pending');
@@ -1323,6 +1797,21 @@ function registerIpc() {
 
   ipcMain.handle('pkg:clear-disk-logs', () => clearDiskLogsAction());
 
+  ipcMain.handle('pkg:ports-list', () => listPortsFromControl());
+  ipcMain.handle(
+    'pkg:ports-kill',
+    (_e, payload: { port?: number | null; pid?: number | null }) =>
+      killPortFromControl({
+        port: payload?.port,
+        pid: payload?.pid,
+      }),
+  );
+  ipcMain.handle(
+    'pkg:ports-reap',
+    (_e, payload?: { nodeOnly?: boolean }) =>
+      reapPortsFromControl({ nodeOnly: payload?.nodeOnly !== false }),
+  );
+
   ipcMain.handle('pkg:pick-dir', async () => {
     const win = mainWindow;
     if (!win) return null;
@@ -1340,13 +1829,15 @@ function registerIpc() {
 
   ipcMain.handle('pkg:get-jobs', () => jobsSnapshot());
 
-  ipcMain.handle('pkg:stop', (_e, jobId?: string) => {
+  ipcMain.handle('pkg:stop', async (_e, jobId?: string) => {
     if (jobId) {
       if (isShellId(jobId)) stopShellCommand(jobId);
-      else stopJob(jobId);
+      else await stopJobAwait(jobId, '已停止');
     } else {
       stopAllJobs();
       stopAllShellCommands();
+      // 等在途异步杀完，避免 UI loading 提前结束
+      await Promise.all([...pendingKills.values()]);
     }
   });
 
@@ -1410,12 +1901,13 @@ export function registerRunnerSecondInstanceHandlers(): void {
       const dir = dirFlag ? dirFlag.slice('--dir='.length) : resolveDirFromArgv(argv);
       const action = restartFlag ? 'restart' : stopFlag ? 'stop' : 'start';
       if (scriptName) {
-        const r = runScriptFromControl({ action, script: scriptName, dir });
-        appendSystemLog(
-          r.ok
-            ? `\n[CLI] ${r.action} ${r.script}${r.dir ? ` @ ${r.dir}` : ''}\n`
-            : `\n[CLI] ${action} 失败：${r.error || '?'}\n`,
-        );
+        void runScriptFromControl({ action, script: scriptName, dir }).then((r) => {
+          appendSystemLog(
+            r.ok
+              ? `\n[CLI] ${r.action} ${r.script}${r.dir ? ` @ ${r.dir}` : ''}\n`
+              : `\n[CLI] ${action} 失败：${r.error || '?'}\n`,
+          );
+        });
       }
       return;
     }
@@ -1447,6 +1939,10 @@ export async function startRunnerHost(opts: RunnerHostOptions = {}): Promise<voi
   getSharedSettingsFn = opts.getSharedSettings ?? null;
 
   prefs = loadPrefs();
+  migrateLegacyRunnerProjects(prefs);
+  onWorkspacePrefsChange(() => {
+    persistProjectsBroadcast();
+  });
   setPersistLogs(shared.persistLogs);
   initialDir = resolveInitialDir();
   if (initialDir) {
@@ -1457,56 +1953,114 @@ export async function startRunnerHost(opts: RunnerHostOptions = {}): Promise<voi
     }
   }
   registerIpc();
-  try {
-    const srv = await startControlServer({
-      onFlushed: (r) => {
-        appendSystemLog(
-          `\n[控制面] flush-logs：pending ${r.pendingBytes}B · writers ${r.writers}${r.persistEnabled ? '' : ' · 开关关闭'}\n`,
-        );
-      },
-      runScript: (req) => runScriptFromControl(req),
-      applySettings: (raw) => applySettingsFromTray(raw),
-      onToggleWindow: () => toggleRunnerWindow(),
-      onRunScript: (r) => {
-        if (r.ok) {
-          appendSystemLog(
-            `\n[控制面] ${r.action} ${r.script}${r.dir ? ` @ ${r.dir}` : ''}${r.wasRunning ? '（原在跑）' : ''}\n`,
-          );
-        } else {
-          appendSystemLog(`\n[控制面] ${r.action} 失败：${r.error || '?'}\n`);
-        }
-      },
-    });
-    stopControlServer = () => {
-      srv.stop();
-      stopControlServer = null;
-    };
-    appendSystemLog(
-      `\n[控制面] ${srv.info.baseUrl}（token 见 userData/control/http.json）\n`,
-    );
-    diagLog('runner', 'control.ready', { baseUrl: srv.info.baseUrl, log: diagLogPath() });
-    await waitForTraySettings(hostMode === 'embedded' ? 0 : 2400);
-  } catch (err) {
-    appendSystemLog(
-      `\n[控制面] 启动失败：${err instanceof Error ? err.message : String(err)}\n`,
-    );
-  }
+  // standalone：立刻出窗，控制面/托盘配置并行，避免串行等 listen + 文件轮询
   if (hostMode === 'standalone') {
     stopToggleSignalWatch = watchRunnerToggleSignal();
     createWindow();
   }
+  void startControlServer({
+    onFlushed: (r) => {
+      appendSystemLog(
+        `\n[控制面] flush-logs：pending ${r.pendingBytes}B · writers ${r.writers}${r.persistEnabled ? '' : ' · 开关关闭'}\n`,
+      );
+    },
+    runScript: (req) => runScriptFromControl(req),
+    runShell: (req) => shellFromControl(req),
+    runPorts: (req) => {
+      if (req.action === 'list') return listPortsFromControl();
+      if (req.action === 'kill') {
+        return killPortFromControl({ port: req.port, pid: req.pid });
+      }
+      return reapPortsFromControl({ nodeOnly: req.nodeOnly });
+    },
+    applySettings: (raw) => applySettingsFromTray(raw),
+    onToggleWindow: () => toggleRunnerWindow(),
+    onRunScript: (r) => {
+      if (r.ok) {
+        appendSystemLog(
+          `\n[控制面] ${r.action} ${r.script}${r.dir ? ` @ ${r.dir}` : ''}${r.wasRunning ? '（原在跑）' : ''}\n`,
+        );
+      } else {
+        appendSystemLog(`\n[控制面] ${r.action} 失败：${r.error || '?'}\n`);
+      }
+    },
+    onRunShell: (r) => {
+      if (r.ok) {
+        const tip =
+          r.action === 'list'
+            ? `list ${r.shells?.length ?? 0}`
+            : r.action === 'close'
+              ? `close ${(r.closed || []).length}`
+              : `${r.action}${r.id ? ` ${r.id}` : ''}`;
+        appendSystemLog(
+          `\n[控制面] shell ${tip}${r.dir ? ` @ ${r.dir}` : ''}\n`,
+        );
+      } else {
+        appendSystemLog(`\n[控制面] shell ${r.action} 失败：${r.error || '?'}\n`);
+      }
+    },
+    onRunPorts: (r) => {
+      if (r.action === 'list') {
+        appendSystemLog(
+          `\n[控制面] ports list：${r.ports.length} 条 · orphan ${r.orphans}\n`,
+        );
+        return;
+      }
+      if (r.action === 'kill') {
+        const okN = r.killed.filter((k) => k.ok).length;
+        appendSystemLog(
+          `\n[控制面] ports kill：${okN}/${r.killed.length}${r.error ? ` · ${r.error}` : ''}\n`,
+        );
+        return;
+      }
+      const okN = r.killed.filter((k) => k.ok).length;
+      appendSystemLog(
+        `\n[控制面] ports reap：killed ${okN} · skipped ${r.skipped.length}${r.nodeOnly ? ' · nodeOnly' : ''}\n`,
+      );
+    },
+  })
+    .then((srv) => {
+      controlListenPort = srv.info.port;
+      stopControlServer = () => {
+        srv.stop();
+        stopControlServer = null;
+        controlListenPort = null;
+      };
+      appendSystemLog(
+        `\n[控制面] ${srv.info.baseUrl}（token 见 userData/control/http.json）\n`,
+      );
+      diagLog('runner', 'control.ready', {
+        baseUrl: srv.info.baseUrl,
+        log: diagLogPath(),
+      });
+    })
+    .catch((err) => {
+      appendSystemLog(
+        `\n[控制面] 启动失败：${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    });
+  void waitForTraySettings(hostMode === 'embedded' ? 0 : 280).catch((err) => {
+    diagLog('runner', 'settings.wait.fail', {
+      err: err instanceof Error ? err.message : String(err),
+    });
+  });
   // embedded：不预开窗口，托盘起来后再按需 create（启动快很多）
 }
 
-/** 空闲时预热 Runner 窗（隐藏），首次 Alt+Q 不必再等 load */
+/** 预热 Runner 窗（隐藏）。默认启动路径不调用，以免 Chromium 冷启动卡主机 */
 export function warmRunnerWindow(): void {
-  if (mainWindow && !mainWindow.isDestroyed()) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    diagLog('runner', 'warm.skip', { reason: 'already' });
+    return;
+  }
+  const t0 = Date.now();
+  diagLog('runner', 'warm.start', {});
   createWindow();
-  // createWindow 会在 ready-to-show 时 show；立刻 hide，保持常驻热态
   const win = mainWindow;
   if (win && !win.isDestroyed()) {
     win.once('ready-to-show', () => {
       if (!isQuitting) hideWindow();
+      diagLog('runner', 'warm.done', { ms: Date.now() - t0 });
     });
   }
 }
