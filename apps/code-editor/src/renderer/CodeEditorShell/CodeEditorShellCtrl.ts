@@ -184,12 +184,17 @@ export class CodeEditorShellCtrl extends Controller<TData, TProps, TState> {
     term.bindShell(this);
   }
 
-  /** Click active Files/Differ again to hide sidebar; otherwise switch + show. */
+  /** Activity bar: click active Files/Differ again to hide; otherwise switch + show. */
   setLeftTool(tool: 'files' | 'differ'): void {
     if (this.state.leftTool === tool && this.state.layout.reviewSidebarOpen) {
       this.patchLayout({ reviewSidebarOpen: false });
       return;
     }
+    this.showLeftTool(tool);
+  }
+
+  /** Always show the given left tool (locate / reveal — never toggle off). */
+  showLeftTool(tool: 'files' | 'differ'): void {
     this.setState({ leftTool: tool });
     this.patchLayout({ leftTool: tool, reviewSidebarOpen: true });
     if (tool === 'differ') {
@@ -984,7 +989,7 @@ export class CodeEditorShellCtrl extends Controller<TData, TProps, TState> {
     relPath: string,
     opts: TOpenFileOpts = {},
   ): Promise<boolean> {
-    this.setLeftTool('files');
+    this.showLeftTool('files');
     return this.openFile(relPath, opts);
   }
 

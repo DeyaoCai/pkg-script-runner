@@ -224,7 +224,7 @@ export class FileTreeCtrl extends Controller<TData, TProps, TState> {
     if (!path) return;
 
     if (this.zone === 'code') {
-      this.shell?.setLeftTool('files');
+      this.shell?.showLeftTool('files');
     }
 
     if (!this.data.roots.length) {
