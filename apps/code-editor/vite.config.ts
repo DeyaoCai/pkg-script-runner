@@ -57,7 +57,7 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    port: 5177,
+    port: 5201,
     strictPort: true,
     fs: {
       allow: [repoRoot],

@@ -50,6 +50,7 @@
     "build:main": "pnpm build:shell && node ./scripts/build-main.mjs",
     "build:renderer": "vite build",
     "build": "pnpm build:main && pnpm build:renderer",
+    "dev:ui": "vite",
     "dev": "pnpm build:main && node ./scripts/dev.mjs",
     "start": "pnpm build && electron .",
     "typecheck": "pnpm build:shell && tsc -p tsconfig.json --noEmit && vue-tsc -p tsconfig.renderer.json --noEmit",

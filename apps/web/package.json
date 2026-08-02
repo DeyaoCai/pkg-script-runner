@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Pkg Runner Vue 3 renderer",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5175",
+    "dev:ui": "vite --host 127.0.0.1 --port 5200",
+    "dev": "vite --host 127.0.0.1 --port 5200",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview",

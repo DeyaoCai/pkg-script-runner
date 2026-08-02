@@ -1,5 +1,5 @@
 /**
- * Dev: start @pkg-runner/web Vite (:5175) then Electron with PKG_RUNNER_UI_URL.
+ * Dev: start @pkg-runner/web Vite (:5200) then Electron with PKG_RUNNER_UI_URL.
  */
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import http from 'node:http';
 
 const runnerRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.join(runnerRoot, '..', '..');
-const UI_URL = process.env.PKG_RUNNER_UI_URL?.trim() || 'http://127.0.0.1:5175';
+const UI_URL = process.env.PKG_RUNNER_UI_URL?.trim() || 'http://127.0.0.1:5200';
 
 function waitUrl(url, timeoutMs) {
   const start = Date.now();

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DEV_URL = process.env.CODE_EDITOR_DEV_URL?.trim() || 'http://127.0.0.1:5177';
+const DEV_URL = process.env.CODE_EDITOR_DEV_URL?.trim() || 'http://127.0.0.1:5201';
 
 function waitUrl(url, timeoutMs) {
   const start = Date.now();
@@ -39,7 +39,7 @@ function run(cwd, cmd, args, env = process.env) {
   });
 }
 
-const vite = run(root, 'pnpm', ['exec', 'vite']);
+const vite = run(root, 'pnpm', ['run', 'dev:ui']);
 
 let electronProc = null;
 let shuttingDown = false;

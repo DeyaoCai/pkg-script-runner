@@ -15,7 +15,7 @@ apps/code-editor   @pkg-runner/code-editor   轻量代码编辑器（Git Diff / 
 pnpm install
 pnpm rebuild:native   # Runner 的 node-pty，可选
 pnpm dev              # 只起托盘（截屏 / 菜单拉起子程序）
-pnpm dev:runner       # 独立跑 Runner（Vite :5175 + Electron）
+pnpm dev:runner       # 独立跑 Runner（Vite :5200 + Electron）
 pnpm dev:code-editor  # 独立跑编辑器
 ```
 
