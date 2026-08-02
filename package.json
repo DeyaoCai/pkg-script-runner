@@ -13,7 +13,7 @@
     "dev:web": "pnpm --filter @pkg-runner/web dev",
     "dev:code-editor": "pnpm --filter @pkg-runner/code-editor dev",
     "dev:all": "pnpm --filter @pkg-runner/tray dev",
-    "build": "pnpm --filter @pkg-runner/controller build && pnpm --filter @pkg-runner/shell build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/web build",
+    "build": "pnpm --filter @pkg-runner/tokens build && pnpm --filter @pkg-runner/controller build && pnpm --filter @pkg-runner/shell build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/web build",
     "build:web": "pnpm --filter @pkg-runner/web build",
     "build:tray": "pnpm --filter @pkg-runner/tray build",
     "build:runner": "pnpm --filter @pkg-runner/runner build",

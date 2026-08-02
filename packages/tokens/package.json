@@ -1,0 +1,31 @@
+{
+  "name": "@pkg-runner/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared design tokens + theme apply/read (CSS + JS)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./tokens.css": "./tokens.css"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "tokens.css"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node ./scripts/sync.mjs",
+    "sync": "node ./scripts/sync.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.5.0"
+  }
+}
