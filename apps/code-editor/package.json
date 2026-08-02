@@ -25,6 +25,7 @@
     "@lezer/highlight": "^1.2.0",
     "@pkg-runner/controller": "workspace:*",
     "@pkg-runner/shell": "workspace:*",
+    "@pkg-runner/tokens": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "codemirror": "^6.0.0",
@@ -47,7 +48,8 @@
   },
   "scripts": {
     "build:shell": "pnpm --filter @pkg-runner/shell build",
-    "build:main": "pnpm build:shell && node ./scripts/build-main.mjs",
+    "build:tokens": "pnpm --filter @pkg-runner/tokens build",
+    "build:main": "pnpm build:tokens && pnpm build:shell && node ./scripts/build-main.mjs",
     "build:renderer": "vite build",
     "build": "pnpm build:main && pnpm build:renderer",
     "dev:ui": "vite",

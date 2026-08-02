@@ -1,14 +1,8 @@
 /**
- * App layout + editor aliases on top of shared runner/ui/tokens.css.
- * Prefer semantic --color-* / compat aliases; keep layout vars local.
+ * Code Editor layout metrics on top of @pkg-runner/tokens.
+ * Color aliases (--side/--cyan/…) live in tokens.css compat layer.
  */
 :root {
-  --side: var(--color-bg-raised);
-  --line: var(--color-border);
-  --cyan: var(--color-accent);
-  --ok: var(--color-success);
-  --bad: var(--color-danger);
-  --warn: var(--color-warning);
   --diff-add: color-mix(in srgb, var(--color-success) 32%, var(--transparent));
   --diff-del: color-mix(in srgb, var(--color-danger) 32%, var(--transparent));
   --diff-hunk: var(--color-accent-soft-strong);

@@ -105,7 +105,10 @@ function setSnapGuides(guides) {
 
 
 /** 当前绘制 / 拾色结果 */
-let drawColor = '#3d8bfd';
+let drawColor =
+  (typeof getComputedStyle !== 'undefined' &&
+    getComputedStyle(document.documentElement).getPropertyValue('--tone').trim()) ||
+  '#669851';
 /** 离屏图，用于精确取色 */
 let sampleCanvas = null;
 let sampleCtx = null;
@@ -116,7 +119,10 @@ function normalizeHex(hex) {
   if (/^#[0-9a-fA-F]{3}$/.test(h)) {
     return `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}`.toUpperCase();
   }
-  return '#3D8BFD';
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue('--tone').trim() ||
+    '#669851'
+  );
 }
 
 function setDrawColor(hex, opts = {}) {

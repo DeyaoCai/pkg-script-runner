@@ -1,3 +1,5 @@
+@import './tokens.css';
+
 :root {
   --radius: 10px;
   --clip: inset(0 round var(--radius));
@@ -8,10 +10,6 @@
   --css-blur: 0px;
   --saturate: 1;
   --border: rgba(180, 190, 210, var(--border-alpha));
-  --text: #e8eaed;
-  --muted: #b8bec8;
-  --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65), 0 0 1px rgba(0, 0, 0, 0.85);
-  --accent: #3d8bfd;
   --font: 'JetBrains Mono', ui-monospace, monospace;
 }
 

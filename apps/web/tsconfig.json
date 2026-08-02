@@ -13,9 +13,17 @@
     "types": ["vite/client"],
     "paths": {
       "@/*": ["./src/*"],
-      "@pkg-runner/controller": ["../../packages/controller/src/index.ts"]
+      "@pkg-runner/controller": ["../../packages/controller/src/index.ts"],
+      "@pkg-runner/tokens": ["../../packages/tokens/src/index.ts"],
+      "@pkg-runner/shared/*": ["../shared/*"]
     },
     "baseUrl": "."
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "../shared/nodeishProcess.ts",
+    "../../packages/tokens/src/**/*.ts",
+    "vite.config.ts"
+  ]
 }

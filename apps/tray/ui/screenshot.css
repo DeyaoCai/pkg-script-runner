@@ -1,11 +1,8 @@
+@import './tokens.css';
+
 :root {
-  --bg: #0e1014;
-  --panel: rgba(28, 31, 38, 0.94);
-  --border: rgba(255, 255, 255, 0.12);
-  --text: #e8eaed;
-  --muted: #9aa0a6;
-  --accent: #3d8bfd;
-  --danger: #f28b82;
+  /* overlay chrome — keep local; colors from tokens */
+  --panel: color-mix(in srgb, var(--color-bg-raised) 94%, transparent);
   --pin: #ff7043;
   --font: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
@@ -295,7 +292,7 @@ body.is-moving .ss-canvas {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--draw-color, #3d8bfd);
+  background: var(--draw-color, var(--accent));
   border: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
   pointer-events: none;

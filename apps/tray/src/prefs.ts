@@ -1,7 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
+import {
+  BRAND_PRESET_PROD,
+  BRAND_PRESET_TEST,
+  brandColorForTone,
+  brandToneFromColor,
+  normalizeBrandColor,
+} from '@pkg-runner/tokens';
+import { pkgRunnerColorEnv } from '../../runner/src/appProfile.js';
 import { diagLog } from './diagLog.js';
+
+export {
+  BRAND_PRESET_PROD,
+  BRAND_PRESET_TEST,
+  brandColorForTone,
+  brandToneFromColor,
+  normalizeBrandColor,
+};
 
 export const DEFAULT_SCREENSHOT_HOTKEY = '';
 export const DEFAULT_ACTIVATE_HOTKEY = '';
@@ -9,8 +25,8 @@ export const DEFAULT_EDITOR_HOTKEY = '';
 export const DEFAULT_SCREENSHOT_HISTORY_LIMIT = 10;
 export const MIN_SCREENSHOT_HISTORY_LIMIT = 1;
 export const MAX_SCREENSHOT_HISTORY_LIMIT = 100;
-export const DEFAULT_SCREENSHOT_DRAW_COLOR = '#3D8BFD';
-export const DEFAULT_GLASS_ALPHA = 55;
+export const DEFAULT_SCREENSHOT_DRAW_COLOR = BRAND_PRESET_PROD;
+export const DEFAULT_GLASS_ALPHA = 100;
 export const DEFAULT_FONT_ID = 'jetbrains';
 export const DEFAULT_THEME = 'dark' as const;
 export const DEFAULT_SHELL_MOSAIC_COLS = 2;
@@ -20,6 +36,8 @@ export const DEFAULT_SHELL_LAYOUT = 'grid' as const;
 
 export type UiTheme = 'dark' | 'light';
 export type ShellLayout = 'grid' | 'single';
+/** 主图色板：正式绿 / 测试棕橙（UI + 托盘/窗口 icon） */
+export type BrandTone = 'prod' | 'test';
 
 /** Shared across tray / runner / editor (everyone uses). */
 export type SharedPrefs = {
@@ -33,6 +51,10 @@ export type SharedPrefs = {
   fontId: string;
   glassAlpha: number;
   theme: UiTheme;
+  /** 运行环境色板镜像（icon / data-env）；由 profile 决定，不随拾色器改 */
+  brandTone: BrandTone;
+  /** 主图强调色（拾色器）；正式/测试仅为颜色预设 */
+  brandColor: string;
   shellMosaicCols: number;
   shellLayout: ShellLayout;
   alwaysOnTop: boolean;
@@ -52,6 +74,8 @@ const DEFAULTS: SharedPrefs = {
   fontId: DEFAULT_FONT_ID,
   glassAlpha: DEFAULT_GLASS_ALPHA,
   theme: DEFAULT_THEME,
+  brandTone: 'test',
+  brandColor: BRAND_PRESET_TEST,
   shellMosaicCols: DEFAULT_SHELL_MOSAIC_COLS,
   shellLayout: DEFAULT_SHELL_LAYOUT,
   alwaysOnTop: false,
@@ -124,12 +148,19 @@ export function normalizeTheme(raw: unknown): UiTheme {
   return raw === 'light' ? 'light' : 'dark';
 }
 
+export function normalizeBrandTone(raw: unknown): BrandTone {
+  if (raw === 'prod' || raw === 'test') return raw;
+  return pkgRunnerColorEnv();
+}
+
 export function normalizeFontId(raw: unknown): string {
   if (typeof raw !== 'string' || !raw.trim()) return DEFAULT_FONT_ID;
   return raw.trim();
 }
 
 export function settingsFromPrefs(prefs: SharedPrefs): SharedSettings {
+  const tone = pkgRunnerColorEnv();
+  prefs.brandTone = tone;
   return {
     screenshotHotkey: prefs.screenshotHotkey,
     activateHotkey: prefs.activateHotkey,
@@ -139,6 +170,8 @@ export function settingsFromPrefs(prefs: SharedPrefs): SharedSettings {
     fontId: prefs.fontId,
     glassAlpha: prefs.glassAlpha,
     theme: prefs.theme,
+    brandTone: tone,
+    brandColor: prefs.brandColor,
     shellMosaicCols: prefs.shellMosaicCols,
     shellLayout: prefs.shellLayout,
     alwaysOnTop: prefs.alwaysOnTop,
@@ -166,6 +199,14 @@ function coerce(parsed: Record<string, unknown>, migrated: boolean): SharedPrefs
     fontId: normalizeFontId(parsed.fontId),
     glassAlpha: normalizeGlassAlpha(parsed.glassAlpha),
     theme: 'theme' in parsed ? normalizeTheme(parsed.theme) : DEFAULT_THEME,
+    brandTone: pkgRunnerColorEnv(),
+    brandColor: (() => {
+      const tone = pkgRunnerColorEnv();
+      if ('brandColor' in parsed) {
+        return normalizeBrandColor(parsed.brandColor, brandColorForTone(tone));
+      }
+      return brandColorForTone(tone);
+    })(),
     shellMosaicCols:
       'shellMosaicCols' in parsed
         ? normalizeShellMosaicCols(parsed.shellMosaicCols)
@@ -219,7 +260,12 @@ export function loadPrefs(): SharedPrefs {
     return migrated;
   }
   diagLog('tray:prefs', 'load.defaults', { file });
-  return { ...DEFAULTS };
+  const tone = pkgRunnerColorEnv();
+  return {
+    ...DEFAULTS,
+    brandTone: tone,
+    brandColor: brandColorForTone(tone),
+  };
 }
 
 export function savePrefs(prefs: SharedPrefs): void {

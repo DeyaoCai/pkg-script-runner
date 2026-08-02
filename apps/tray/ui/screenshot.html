@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>截屏</title>
     <link rel="stylesheet" href="./screenshot.css" />
+    <script>
+      (function () {
+        document.addEventListener('DOMContentLoaded', function () {
+          var el = document.getElementById('colorInput');
+          var hex = document.getElementById('colorHex');
+          var tone =
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--tone')
+              .trim() || '#669851';
+          if (el) el.value = tone;
+          if (hex) hex.textContent = tone.toUpperCase();
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="app" class="ss-app">
@@ -119,8 +133,8 @@
           </svg>
         </button>
         <label class="ss-color" title="选择绘制颜色">
-          <input type="color" id="colorInput" value="#3d8bfd" aria-label="绘制颜色" />
-          <span id="colorHex" class="ss-color-hex">#3D8BFD</span>
+          <input type="color" id="colorInput" value="#669851" aria-label="绘制颜色" />
+          <span id="colorHex" class="ss-color-hex">#669851</span>
         </label>
         <span class="ss-sep"></span>
         <button type="button" class="ss-btn" id="undoBtn" title="撤销">撤销</button>

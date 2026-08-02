@@ -15,6 +15,7 @@
     "paths": {
       "@/*": ["./src/renderer/*"],
       "@pkg-runner/controller": ["../../packages/controller/src/index.ts"],
+      "@pkg-runner/tokens": ["../../packages/tokens/src/index.ts"],
       "@pkg-runner/shell/renderer": ["../../packages/shell/src/renderer/index.ts"],
       "@pkg-runner/shell/renderer/*": ["../../packages/shell/src/renderer/*"]
     },

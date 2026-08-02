@@ -36,7 +36,7 @@
 }
 
 .theme-panel-head strong {
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 650;
   color: var(--color-fg);
 }
@@ -48,7 +48,7 @@
   border-radius: 8px;
   background: transparent;
   color: var(--color-fg-muted);
-  font-size: 18px;
+  font-size: var(--fs-16);
   line-height: 1;
   cursor: pointer;
 }
@@ -77,7 +77,7 @@
   background: var(--color-bg-row);
   color: var(--color-fg);
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-family: inherit;
   cursor: pointer;
 }

@@ -7,13 +7,14 @@
   "scripts": {
     "dev:ui": "vite --host 127.0.0.1 --port 5200",
     "dev": "vite --host 127.0.0.1 --port 5200",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "pnpm --filter @pkg-runner/tokens build && vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview",
     "clean": "rimraf dist"
   },
   "dependencies": {
     "@pkg-runner/controller": "workspace:*",
+    "@pkg-runner/tokens": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "vue": "^3.5.0"

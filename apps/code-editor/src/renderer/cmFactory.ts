@@ -36,16 +36,16 @@ const theme = EditorView.theme(
       borderRight: '1px solid var(--line)',
     },
     '.cm-activeLine': {
-      backgroundColor: 'rgba(0, 245, 255, 0.06)',
+      backgroundColor: 'var(--color-accent-soft)',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: 'rgba(0, 245, 255, 0.08)',
+      backgroundColor: 'var(--color-accent-soft)',
     },
     '&.cm-focused .cm-cursor': {
       borderLeftColor: 'var(--cyan)',
     },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: 'rgba(0, 245, 255, 0.22)',
+      backgroundColor: 'var(--color-accent-soft-strong)',
     },
   },
   { dark: true },

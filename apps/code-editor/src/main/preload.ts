@@ -1,7 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { createWindowPreloadApi } from '@pkg-runner/shell/preload';
 
+function resolveColorEnv(): 'prod' | 'test' {
+  return process.env.PKG_RUNNER_COLOR_ENV?.trim().toLowerCase() === 'test'
+    ? 'test'
+    : 'prod';
+}
+
 const api = {
+  /** Sync — apply before first paint (`data-env` / brand tone). */
+  getColorEnv: (): 'prod' | 'test' => resolveColorEnv(),
   getNav: () => ipcRenderer.invoke('nav:get'),
   pickWorkspace: () => ipcRenderer.invoke('workspace:pick'),
   openWorkspace: (dir: string) => ipcRenderer.invoke('workspace:open', dir),
@@ -77,6 +85,15 @@ const api = {
     ipcRenderer.on('term:exit', handler);
     return () => {
       ipcRenderer.removeListener('term:exit', handler);
+    };
+  },
+  onExternalNav: (cb: (nav: unknown) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, nav: unknown) => {
+      cb(nav);
+    };
+    ipcRenderer.on('nav:external-open', handler);
+    return () => {
+      ipcRenderer.removeListener('nav:external-open', handler);
     };
   },
   ...createWindowPreloadApi(ipcRenderer),

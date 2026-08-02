@@ -22,6 +22,7 @@ import {
   listScreenshotHistory,
   removeScreenshotHistory,
 } from './screenshotHistory.js';
+import { BRAND_PRESET_PROD } from '@pkg-runner/tokens';
 
 type SessionPayload = {
   fileUrl: string;
@@ -40,7 +41,7 @@ let warmLoadPromise: Promise<void> | null = null;
 let protocolRegistered = false;
 let ipcReady = false;
 let getHistoryLimit: () => number = () => 10;
-let getDrawColor: () => string = () => '#3D8BFD';
+let getDrawColor: () => string = () => BRAND_PRESET_PROD;
 let setDrawColorPref: (hex: string) => string = (hex) => hex;
 /** 截屏结束时回调（如恢复主窗） */
 let onSessionEnd: (() => void) | null = null;

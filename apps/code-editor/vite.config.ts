@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(root, '../..');
+const tokensPkg = path.join(repoRoot, 'packages/tokens');
 
 export default defineConfig({
   root,
@@ -15,6 +16,14 @@ export default defineConfig({
       {
         find: '@',
         replacement: path.join(root, 'src/renderer'),
+      },
+      {
+        find: '@pkg-runner/tokens/tokens.css',
+        replacement: path.join(tokensPkg, 'tokens.css'),
+      },
+      {
+        find: '@pkg-runner/tokens',
+        replacement: path.join(tokensPkg, 'src/index.ts'),
       },
       {
         find: '@pkg-runner/controller',

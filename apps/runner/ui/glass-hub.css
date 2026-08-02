@@ -1,13 +1,6 @@
+@import './tokens.css';
+
 :root {
-  --bg: #1b1d21;
-  --panel: #24272c;
-  --border: #343841;
-  --text: #e8eaed;
-  --muted: #9aa0a6;
-  --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65), 0 0 1px rgba(0, 0, 0, 0.85);
-  --accent: #3d8bfd;
-  --row: #2a2e34;
-  --row-hover: #32373f;
   --font: 'JetBrains Mono', ui-monospace, monospace;
 }
 

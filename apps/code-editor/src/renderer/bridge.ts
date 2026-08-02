@@ -34,6 +34,8 @@ export type TGitChangeDto = {
 };
 
 export type TCodeEditorBridge = {
+  /** Sync — set data-env / brand before paint. */
+  getColorEnv: () => 'prod' | 'test';
   getNav: () => Promise<TNavSnapshot>;
   pickWorkspace: () => Promise<TNavSnapshot>;
   openWorkspace: (dir: string) => Promise<TNavSnapshot>;
@@ -108,4 +110,5 @@ export type TCodeEditorBridge = {
   onTermExit: (
     cb: (payload: { id: string; code: number | null }) => void,
   ) => () => void;
+  onExternalNav?: (cb: (nav: TNavSnapshot) => void) => () => void;
 } & import('@pkg-runner/shell/renderer').TWindowBridge;

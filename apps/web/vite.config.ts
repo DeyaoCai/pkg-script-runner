@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const runnerUi = path.join(root, '..', 'runner', 'ui');
+const sharedDir = path.join(root, '..', 'shared');
+const tokensPkg = path.join(root, '..', '..', 'packages', 'tokens');
 
 export default defineConfig({
   root,
@@ -13,6 +15,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.join(root, 'src'),
+      '@pkg-runner/shared': sharedDir,
+      '@pkg-runner/tokens/tokens.css': path.join(tokensPkg, 'tokens.css'),
+      '@pkg-runner/tokens': path.join(tokensPkg, 'src', 'index.ts'),
       '@pkg-runner/controller': path.join(
         root,
         '..',
@@ -29,7 +34,7 @@ export default defineConfig({
     port: 5200,
     strictPort: true,
     fs: {
-      allow: [root, runnerUi],
+      allow: [root, runnerUi, sharedDir, tokensPkg],
     },
   },
   build: {

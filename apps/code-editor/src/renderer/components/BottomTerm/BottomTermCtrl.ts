@@ -1,4 +1,5 @@
 import { Controller } from '@pkg-runner/controller';
+import { BRAND_PRESET_PROD, readCssVar } from '@pkg-runner/tokens';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import type { CodeEditorShellCtrl } from '../../CodeEditorShell/CodeEditorShellCtrl.ts';
@@ -42,19 +43,15 @@ const MAX_H = 560;
 const DEFAULT_H = 220;
 const MAX_COLS = 4;
 
-function readCss(name: string, fallback: string): string {
-  const v = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
-  return v || fallback;
-}
-
 function termTheme() {
   return {
-    background: readCss('--panel', '#16181c'),
-    foreground: readCss('--text', '#e8eaed'),
-    cursor: readCss('--cyan', '#00f5ff'),
-    selectionBackground: readCss('--color-accent-soft', 'rgba(0,245,255,0.2)'),
+    background: readCssVar('--panel', '#16181c'),
+    foreground: readCssVar('--text', '#e8eaed'),
+    cursor: readCssVar('--cyan', BRAND_PRESET_PROD),
+    selectionBackground: readCssVar(
+      '--color-accent-soft',
+      'color-mix(in srgb, var(--tone) 28%, transparent)',
+    ),
   };
 }
 
