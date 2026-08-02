@@ -23,3 +23,9 @@ export {
   type DocumentRoot,
   type UiTheme,
 } from './theme.js';
+
+export {
+  CHROME_BG,
+  chromeBackground,
+  type ChromeBgTable,
+} from './chrome.js';
