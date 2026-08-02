@@ -8,10 +8,10 @@
   "author": "DeyaoCai",
   "main": "dist/main/main.js",
   "files": [
-    "dist",
-    "assets"
+    "dist"
   ],
   "dependencies": {
+    "@pkg-runner/assets": "workspace:*",
     "@codemirror/commands": "^6.8.0",
     "@codemirror/lang-css": "^6.3.0",
     "@codemirror/lang-html": "^6.4.0",
@@ -50,7 +50,8 @@
   "scripts": {
     "build:shell": "pnpm --filter @pkg-runner/shell build",
     "build:tokens": "pnpm --filter @pkg-runner/tokens build",
-    "build:main": "pnpm build:tokens && pnpm build:shell && node ./scripts/build-main.mjs",
+    "build:assets": "pnpm --filter @pkg-runner/assets build",
+    "build:main": "pnpm build:assets && pnpm build:tokens && pnpm build:shell && node ./scripts/build-main.mjs",
     "build:renderer": "vite build",
     "build": "pnpm build:main && pnpm build:renderer",
     "dev:ui": "vite",

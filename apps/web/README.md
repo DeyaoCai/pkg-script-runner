@@ -4,7 +4,7 @@ Pkg Runner 主窗口（Vue 3 + Vite）。
 
 - 主题：`@pkg-runner/tokens`（`tokens.css` + `bootDocumentTheme`）
 - 字体等 runner 专属资源仍来自 `@pkg-runner/runner` 的 `ui/`
-- 标题栏品牌图：`src/assets/logo.png`（与 `public/logo.png` 同源）
+- 标题栏品牌图：`@pkg-runner/assets/media/logo.png`
 
 ```bash
 pnpm --filter @pkg-runner/tokens build

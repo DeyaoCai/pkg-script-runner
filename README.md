@@ -15,6 +15,7 @@ apps/web           @pkg-runner/web           Runner 的 Vue UI
 apps/code-editor   @pkg-runner/code-editor   轻量代码编辑器（Git Diff / 多项目）
 apps/shared        —                         workspace / nodeish 等跨进程小模块
 packages/tokens    @pkg-runner/tokens        设计 token + 主题读写 API
+packages/assets    @pkg-runner/assets        品牌图（icon / tray / logo）
 packages/shell     @pkg-runner/shell         无边框窗 / tip / 窗控
 packages/controller @pkg-runner/controller   Vue Controller 基类
 ```
@@ -29,12 +30,14 @@ packages/controller @pkg-runner/controller   Vue Controller 基类
 | [docs/CONTROL-API.md](docs/CONTROL-API.md) | Runner 本机 HTTP 控制面 |
 | [docs/CONTROLLER-VUE.md](docs/CONTROLLER-VUE.md) | Vue Controller 约定 |
 | [packages/tokens/README.md](packages/tokens/README.md) | 主题 token / sync / 窗口底色 |
+| [packages/assets/README.md](packages/assets/README.md) | 品牌 icon / tray / logo |
 | [apps/tray/README.md](apps/tray/README.md) · [runner](apps/runner/README.md) · [web](apps/web/README.md) · [code-editor](apps/code-editor/README.md) | 各 app 说明 |
 
 ## 开发
 
 ```bash
 pnpm install
+pnpm --filter @pkg-runner/assets build   # 品牌图 + sync runner/ui/logo.png
 pnpm --filter @pkg-runner/tokens build   # 主题包 + 同步 tray/runner 的 tokens.css
 pnpm rebuild:native                      # Runner 的 node-pty，可选
 pnpm dev                                 # 托盘（同进程嵌入 Runner / Editor）
@@ -71,17 +74,24 @@ pnpm dist:win
 
 ## 主题与品牌
 
-唯一色源：`@pkg-runner/tokens`（详见 [packages/tokens/README.md](packages/tokens/README.md)）。
+唯一色源：`@pkg-runner/tokens`（详见 [packages/tokens/README.md](packages/tokens/README.md)）。  
+唯一品牌图：`@pkg-runner/assets`（`packages/assets/media/`，详见 [packages/assets/README.md](packages/assets/README.md)）。
 
 - CSS：`packages/tokens/tokens.css`（`--preset-prod` / `--preset-test` → `--tone`）
-- JS：`bootDocumentTheme` / `applyBrandColor` / `applyTheme` / `readCssVar`
+- JS：`bootDocumentTheme` / `applyBrandColor` / `applyTheme` / `readCssVar` / `chromeBackground`
 - 托盘 `file://` 页：build 时 sync 出 `apps/tray/ui/tokens.css` + `pkg-tokens.js`
-- Logo / 图标：`assets/pkg-runner-logo-prod.png`（透明底）；各 app `assets/icon*.png` · `tray*.png`
+- Logo / 图标：`packages/assets/media/{logo,icon,tray}*.png`；Electron 运行时从该包解析
 
 改正式绿或测试橙时：只改 `tokens.css` 的 `--preset-*` 与 `src/brand.ts` 常量，再执行：
 
 ```bash
 pnpm --filter @pkg-runner/tokens build
+```
+
+换 logo / 图标：替换 `packages/assets/media/` 下对应文件，再：
+
+```bash
+pnpm --filter @pkg-runner/assets build
 ```
 
 黑底 PNG 转透明：

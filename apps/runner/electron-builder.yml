@@ -4,12 +4,11 @@ copyright: Copyright © DS Agent
 artifactName: PkgRunner-${version}-${os}-${arch}.${ext}
 directories:
   output: release
-  buildResources: assets
+  buildResources: ../../packages/assets/media
 files:
   - dist/**/*
   - dist-ui/**/*
   - ui/**/*
-  - assets/**/*
   - package.json
   # 开发产物 / 调试符号
   - '!**/*.map'
@@ -49,7 +48,7 @@ win:
     - target: portable
       arch:
         - x64
-  icon: assets/icon.png
+  icon: icon.png
   executableName: PkgRunner
 portable:
   artifactName: PkgRunner-${version}-portable.exe

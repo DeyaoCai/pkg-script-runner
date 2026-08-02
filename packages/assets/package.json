@@ -1,0 +1,33 @@
+{
+  "name": "@pkg-runner/assets",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "author": "DeyaoCai",
+  "type": "module",
+  "description": "Shared brand media (icons · tray · logo) + path helpers",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./media/*": "./media/*"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "media"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node ./scripts/sync.mjs",
+    "sync": "node ./scripts/sync.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.5.0"
+  }
+}

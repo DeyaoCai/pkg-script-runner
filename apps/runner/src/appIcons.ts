@@ -1,18 +1,17 @@
 /**
- * Env-aware window / tray icons.
+ * Env-aware window / tray icons — media lives in `@pkg-runner/assets`.
  * prod → icon.png · tray.png；test → icon-test.png · tray-test.png
  */
-import fs from 'node:fs';
-import path from 'node:path';
+import {
+  resolveEnvAssetPath as resolveBrandAsset,
+  type BrandAssetKind,
+} from '@pkg-runner/assets';
 import { pkgRunnerColorEnv } from './appProfile.js';
 
+/** @param _appRoot unused; kept so call sites stay stable during migration */
 export function resolveEnvAssetPath(
-  appRoot: string,
-  kind: 'icon' | 'tray',
+  _appRoot: string,
+  kind: BrandAssetKind,
 ): string {
-  const env = pkgRunnerColorEnv();
-  const test = path.join(appRoot, 'assets', `${kind}-test.png`);
-  const prod = path.join(appRoot, 'assets', `${kind}.png`);
-  if (env === 'test' && fs.existsSync(test)) return test;
-  return prod;
+  return resolveBrandAsset(kind, pkgRunnerColorEnv());
 }

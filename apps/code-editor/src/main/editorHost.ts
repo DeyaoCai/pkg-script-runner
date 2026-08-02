@@ -12,6 +12,7 @@ import {
   revealPath,
   openPathWithDefault,
 } from '@pkg-runner/shell/main';
+import { resolveEnvAssetPath } from '@pkg-runner/assets';
 import {
   listDir,
   readFileText,
@@ -350,10 +351,7 @@ function createWindow(): void {
     process.env.PKG_RUNNER_COLOR_ENV?.trim().toLowerCase() === 'test'
       ? 'test'
       : 'prod';
-  const iconTest = path.join(editorAppRoot(), 'assets', 'icon-test.png');
-  const iconProd = path.join(editorAppRoot(), 'assets', 'icon.png');
-  const appIcon =
-    colorEnv === 'test' && fs.existsSync(iconTest) ? iconTest : iconProd;
+  const appIcon = resolveEnvAssetPath('icon', colorEnv);
   mainWindow = new BrowserWindow(
     framelessWindowOptions({
       width: 1280,

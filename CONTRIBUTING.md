@@ -27,6 +27,7 @@ pnpm --filter @pkg-runner/runner verify:pty   # optional smoke (needs built runn
 
 - Apps stay `"private": true` unless we intentionally publish an npm package.
 - Theme colors: edit `packages/tokens` only, then `pnpm --filter @pkg-runner/tokens build`. Do not hand-edit synced `apps/*/ui/tokens.css` or `apps/tray/ui/pkg-tokens.js`.
+- Brand images: edit `packages/assets/media` only, then `pnpm --filter @pkg-runner/assets build`. Do not duplicate icons under each app.
 - Prefer small, focused PRs. Match existing TypeScript / Vue Controller patterns (`docs/CONTROLLER-VUE.md`).
 - Do not commit agent/IDE leftovers (`.cursor/`, `.ds-agent/`, `.co-der-fs-bak/`), `release/`, or local logs.
 

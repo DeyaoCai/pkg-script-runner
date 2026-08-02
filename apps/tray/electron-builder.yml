@@ -4,11 +4,12 @@ copyright: Copyright © DS Agent
 artifactName: PkgRunner-${version}-${os}-${arch}.${ext}
 directories:
   output: release
+  # nsis include (installer.nsh); brand icon from packages/assets
   buildResources: assets
 files:
   - dist/**/*
   - ui/**/*
-  - assets/**/*
+  - assets/installer.nsh
   - package.json
   - '!**/*.map'
   - '!**/*.pdb'
@@ -60,7 +61,7 @@ win:
     - target: dir
       arch:
         - x64
-  icon: assets/icon.png
+  icon: ../../packages/assets/media/icon.png
   executableName: PkgRunnerTray
 nsis:
   oneClick: false

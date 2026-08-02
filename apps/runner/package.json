@@ -10,10 +10,10 @@
   "files": [
     "dist",
     "dist-ui",
-    "ui",
-    "assets"
+    "ui"
   ],
   "dependencies": {
+    "@pkg-runner/assets": "workspace:*",
     "@pkg-runner/tokens": "workspace:*",
     "koffi": "^3.1.2",
     "node-pty": "^1.1.0"
@@ -30,10 +30,11 @@
   },
   "scripts": {
     "build:tokens": "pnpm --filter @pkg-runner/tokens build",
-    "build:main": "pnpm build:tokens && node ./scripts/build-main.mjs",
+    "build:assets": "pnpm --filter @pkg-runner/assets build",
+    "build:main": "pnpm build:assets && pnpm build:tokens && node ./scripts/build-main.mjs",
     "build:ui": "pnpm --filter @pkg-runner/web build",
     "build": "pnpm build:main && pnpm build:ui",
-    "build:dev": "pnpm build:tokens && node ./scripts/build-main.mjs --dev",
+    "build:dev": "pnpm build:assets && pnpm build:tokens && node ./scripts/build-main.mjs --dev",
     "dev:ui": "pnpm --filter @pkg-runner/web dev",
     "dev": "node ./scripts/dev.mjs",
     "start": "electron .",

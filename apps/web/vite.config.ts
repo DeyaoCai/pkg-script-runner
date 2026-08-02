@@ -7,6 +7,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const runnerUi = path.join(root, '..', 'runner', 'ui');
 const sharedDir = path.join(root, '..', 'shared');
 const tokensPkg = path.join(root, '..', '..', 'packages', 'tokens');
+const assetsPkg = path.join(root, '..', '..', 'packages', 'assets');
 
 export default defineConfig({
   root,
@@ -18,6 +19,8 @@ export default defineConfig({
       '@pkg-runner/shared': sharedDir,
       '@pkg-runner/tokens/tokens.css': path.join(tokensPkg, 'tokens.css'),
       '@pkg-runner/tokens': path.join(tokensPkg, 'src', 'index.ts'),
+      '@pkg-runner/assets/media': path.join(assetsPkg, 'media'),
+      '@pkg-runner/assets': path.join(assetsPkg, 'src', 'index.ts'),
       '@pkg-runner/controller': path.join(
         root,
         '..',
@@ -34,7 +37,7 @@ export default defineConfig({
     port: 5200,
     strictPort: true,
     fs: {
-      allow: [root, runnerUi, sharedDir, tokensPkg],
+      allow: [root, runnerUi, sharedDir, tokensPkg, assetsPkg],
     },
   },
   build: {

@@ -31,3 +31,6 @@ apps/tray/preload.js
 apps/tray/ui/tokens.css
 apps/tray/ui/pkg-tokens.js
 apps/runner/ui/tokens.css
+
+# @pkg-runner/assets sync (source: packages/assets/media)
+apps/runner/ui/logo.png

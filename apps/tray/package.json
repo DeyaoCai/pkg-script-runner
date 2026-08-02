@@ -13,6 +13,7 @@
     "assets"
   ],
   "dependencies": {
+    "@pkg-runner/assets": "workspace:*",
     "@pkg-runner/tokens": "workspace:*",
     "koffi": "^3.1.2",
     "node-pty": "^1.1.0"
@@ -26,9 +27,9 @@
     "typescript": "^5.5.0"
   },
   "scripts": {
-    "build:main": "pnpm --filter @pkg-runner/tokens build && node ./scripts/build-main.mjs",
+    "build:main": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && node ./scripts/build-main.mjs",
     "build": "pnpm build:main",
-    "build:dev": "pnpm --filter @pkg-runner/tokens build && node ./scripts/build-main.mjs --dev",
+    "build:dev": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && node ./scripts/build-main.mjs --dev",
     "dev": "node ./scripts/dev.mjs",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit",

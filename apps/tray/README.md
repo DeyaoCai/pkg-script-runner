@@ -10,7 +10,8 @@
 - **保存**：同上并关闭设置窗
 - **窗口**：打开 Runner / 编辑器（`show*`，不是 toggle）
 
-主题 CSS / 预设来自 `@pkg-runner/tokens`（`ui/tokens.css` + `ui/pkg-tokens.js`，由 tokens 包生成）。
+主题 CSS / 预设来自 `@pkg-runner/tokens`（`ui/tokens.css` + `ui/pkg-tokens.js`，由 tokens 包生成）。  
+窗口 / 托盘图标来自 `@pkg-runner/assets`（`packages/assets/media`）。
 
 ## 菜单
 

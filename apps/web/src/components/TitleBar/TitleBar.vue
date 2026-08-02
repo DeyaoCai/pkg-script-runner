@@ -120,7 +120,7 @@
 <script lang="ts" setup>
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { APP_CTRL_KEY } from '../../appContext';
-import logoUrl from '../../assets/logo.png';
+import logoUrl from '@pkg-runner/assets/media/logo.png';
 
 const app = inject(APP_CTRL_KEY)!;
 const ctrl = app.controllers.titleBar;

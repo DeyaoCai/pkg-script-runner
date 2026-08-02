@@ -4,10 +4,9 @@ copyright: Copyright © DS Agent
 artifactName: CodeEditor-${version}-${os}-${arch}.${ext}
 directories:
   output: release
-  buildResources: assets
+  buildResources: ../../packages/assets/media
 files:
   - dist/**/*
-  - assets/**/*
   - package.json
   - '!**/*.map'
   - '!**/node_modules/node-pty/prebuilds/darwin-*/**'
@@ -28,7 +27,7 @@ win:
     - target: portable
       arch:
         - x64
-  icon: assets/icon.png
+  icon: icon.png
   executableName: CodeEditor
 portable:
   artifactName: CodeEditor-${version}-portable.exe

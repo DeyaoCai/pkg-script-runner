@@ -115,9 +115,7 @@ function resolveTrayIconPath(): string {
   const kind = process.platform === 'win32' ? 'icon' : 'tray';
   const p = resolveEnvAssetPath(APP_ROOT, kind);
   if (activeBrandTone() === 'test' && !/-test\.png$/i.test(path.basename(p))) {
-    diagLog('tray', 'icon.missing-test', {
-      tried: path.join(APP_ROOT, 'assets', `${kind}-test.png`),
-    });
+    diagLog('tray', 'icon.missing-test', { kind, path: p });
   }
   return p;
 }
