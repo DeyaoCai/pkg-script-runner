@@ -1,3 +1,5 @@
+import { applyFontId } from '@pkg-runner/tokens';
+
 export type FontPreset = {
   id: string;
   label: string;
@@ -34,15 +36,9 @@ export const FONT_PRESETS: FontPreset[] = [
 
 export const DEFAULT_FONT_ID = 'jetbrains';
 
+/** @deprecated use applyFontId from @pkg-runner/tokens */
 export function applyDocumentFonts(fontId: string) {
-  const hit =
-    FONT_PRESETS.find((p) => p.id === fontId) ||
-    FONT_PRESETS.find((p) => p.id === DEFAULT_FONT_ID) ||
-    FONT_PRESETS[0];
-  const root = document.documentElement;
-  root.style.setProperty('--font', hit.stack);
-  root.style.setProperty('--sans', hit.stack);
-  root.style.setProperty('--mono', hit.stack);
+  applyFontId(fontId);
 }
 
 export function fontLabel(fontId: string): string {

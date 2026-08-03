@@ -2,10 +2,12 @@
   "name": "@pkg-runner/fonts",
   "version": "0.1.0",
   "private": true,
+  "license": "OFL-1.1",
   "description": "Shared web fonts (JetBrains Mono 2.304, OFL-1.1)",
   "type": "module",
   "exports": {
     "./jetbrains-mono.css": "./jetbrains-mono.css",
+    "./jetbrains-mono-compact.css": "./jetbrains-mono-compact.css",
     "./catalog.js": {
       "types": "./catalog.d.ts",
       "default": "./catalog.js"
@@ -14,6 +16,7 @@
   },
   "files": [
     "jetbrains-mono.css",
+    "jetbrains-mono-compact.css",
     "catalog.js",
     "catalog.d.ts",
     "files",
