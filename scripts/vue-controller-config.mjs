@@ -4,6 +4,8 @@
 export const SCAN_ROOTS = [
   'apps/web/src',
   'apps/code-editor/src/renderer',
+  'apps/tray-ui/src',
+  'apps/desktop-zones/src/renderer',
 ];
 
 /** 各根下相对路径前缀：跳过扫描 */

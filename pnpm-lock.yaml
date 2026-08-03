@@ -59,12 +59,18 @@ importers:
       '@pkg-runner/controller':
         specifier: workspace:*
         version: link:../../packages/controller
+      '@pkg-runner/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
       '@pkg-runner/shell':
         specifier: workspace:*
         version: link:../../packages/shell
       '@pkg-runner/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
+      '@pkg-runner/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -102,6 +108,58 @@ importers:
       electron-builder:
         specifier: ^26.0.12
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      rimraf:
+        specifier: ^6.0.0
+        version: 6.1.3
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@20.19.43)(less@4.8.0)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
+  apps/desktop-zones:
+    dependencies:
+      '@pkg-runner/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
+      '@pkg-runner/controller':
+        specifier: workspace:*
+        version: link:../../packages/controller
+      '@pkg-runner/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
+      '@pkg-runner/shell':
+        specifier: workspace:*
+        version: link:../../packages/shell
+      '@pkg-runner/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
+      '@pkg-runner/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      koffi:
+        specifier: ^3.1.2
+        version: 3.1.2
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.40(typescript@5.9.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@20.19.43)(less@4.8.0))(vue@3.5.40(typescript@5.9.3))
+      electron:
+        specifier: 35.7.5
+        version: 35.7.5
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
@@ -163,6 +221,9 @@ importers:
       '@pkg-runner/assets':
         specifier: workspace:*
         version: link:../../packages/assets
+      '@pkg-runner/shell':
+        specifier: workspace:*
+        version: link:../../packages/shell
       '@pkg-runner/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
@@ -192,6 +253,49 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
 
+  apps/tray-ui:
+    dependencies:
+      '@pkg-runner/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
+      '@pkg-runner/controller':
+        specifier: workspace:*
+        version: link:../../packages/controller
+      '@pkg-runner/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
+      '@pkg-runner/shell':
+        specifier: workspace:*
+        version: link:../../packages/shell
+      '@pkg-runner/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
+      '@pkg-runner/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.40(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@22.20.1)(less@4.8.0))(vue@3.5.40(typescript@5.9.3))
+      less:
+        specifier: ^4.2.0
+        version: 4.8.0
+      rimraf:
+        specifier: ^6.0.0
+        version: 6.1.3
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@22.20.1)(less@4.8.0)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
   apps/web:
     dependencies:
       '@pkg-runner/assets':
@@ -200,9 +304,18 @@ importers:
       '@pkg-runner/controller':
         specifier: workspace:*
         version: link:../../packages/controller
+      '@pkg-runner/fonts':
+        specifier: workspace:*
+        version: link:../../packages/fonts
+      '@pkg-runner/shell':
+        specifier: workspace:*
+        version: link:../../packages/shell
       '@pkg-runner/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
+      '@pkg-runner/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -256,8 +369,16 @@ importers:
         specifier: ^3.5.0
         version: 3.5.40(typescript@5.9.3)
 
+  packages/fonts: {}
+
   packages/shell:
     devDependencies:
+      '@pkg-runner/assets':
+        specifier: workspace:*
+        version: link:../assets
+      '@pkg-runner/controller':
+        specifier: workspace:*
+        version: link:../controller
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.43
@@ -285,6 +406,8 @@ importers:
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
+
+  packages/ui: {}
 
 packages:
 
