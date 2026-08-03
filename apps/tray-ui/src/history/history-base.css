@@ -1,0 +1,14 @@
+body {
+  margin: 0;
+  font: 13px/1.45 var(--sans, system-ui, sans-serif);
+  background: var(--bg);
+  color: var(--fg);
+  height: 100vh;
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}

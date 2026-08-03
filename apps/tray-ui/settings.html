@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>设置</title>
+    <script>
+      (function () {
+        var q = new URLSearchParams(location.search).get('env');
+        window.__bootEnv = q === 'test' ? 'test' : 'prod';
+        document.documentElement.setAttribute('data-env', window.__bootEnv);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/settings/main.ts"></script>
+  </body>
+</html>
