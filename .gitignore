@@ -25,4 +25,6 @@ apps/tray/preload.js
 
 # @pkg-runner/tokens sync outputs (source: packages/tokens)
 apps/tray/ui/tokens.css
+apps/tray/ui/chrome.css
 apps/tray/ui/pkg-tokens.js
+packages/tokens/chrome.css

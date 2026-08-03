@@ -23,6 +23,15 @@ export {
 } from './theme.js';
 
 export {
+  applyFontId,
+  applySharedUiSettings,
+  bootSharedUi,
+  type BootSharedUiOptions,
+  type SharedUiBridge,
+  type SharedUiSettings,
+} from './sharedUi.js';
+
+export {
   CHROME_BG,
   chromeBackground,
   type ChromeBgTable,

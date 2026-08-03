@@ -203,6 +203,15 @@ html[data-env='prod'] {
   --lh-body: 1.45;
   --app-radius: 12px;
   --titlebar-height: 48px;
+  /* TitleBarShell 外观旋钮 — apps 用变量覆盖，勿 :deep 改壳 */
+  --titlebar-brand-pad-start: var(--space-4);
+  --titlebar-brand-pad-end: var(--space-3);
+  --titlebar-brand-fg: var(--color-fg);
+  --titlebar-brand-weight: 650;
+  --titlebar-brand-tracking: 0;
+  --titlebar-sub-fg: var(--color-fg-muted);
+  --titlebar-border: var(--color-border);
+  --titlebar-mark-size: 28px;
   --chip-height: 32px;
   --space-1: 4px;
   --space-2: 8px;
