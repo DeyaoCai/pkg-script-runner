@@ -1,0 +1,8 @@
+/**
+ * Frameless chrome styles — import after @pkg-runner/tokens/tokens.css.
+ * Prefer `@pkg-runner/tokens/chrome.css` (synced barrel) so Vite + tray share one path.
+ */
+@import './drag.css';
+@import './titlebar.css';
+@import './titlebar-controls.css';
+@import './window-controls.css';

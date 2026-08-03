@@ -1,0 +1,88 @@
+/**
+ * TitleBarShell control chrome — chips / action buttons.
+ * Layout lives in titlebar.css; this file is appearance only.
+ */
+
+.titlebar .tb-chip,
+.titlebar-actions .btn,
+.titlebar .titlebar-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--chip-height, 32px);
+  min-height: var(--chip-height, 32px);
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--border, var(--line));
+  border-radius: 8px;
+  background: var(--row, var(--panel));
+  color: var(--text, var(--fg));
+  font: inherit;
+  font-size: var(--fs-12, 12px);
+  line-height: 1.25;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.titlebar .tb-chip {
+  max-width: min(280px, 28vw);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.titlebar .tb-chip:hover:not(:disabled),
+.titlebar-actions .btn:hover:not(:disabled),
+.titlebar .titlebar-tool:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.titlebar .tb-chip:disabled,
+.titlebar-actions .btn:disabled,
+.titlebar .titlebar-tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.titlebar-actions .btn.accent,
+.titlebar-actions .btn.primary {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  background: var(--color-accent-soft, var(--accent-soft));
+}
+
+.titlebar .chip-label,
+.titlebar .ws-label {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: var(--fs-12, 12px);
+  font-weight: 600;
+}
+
+.titlebar .chip-value,
+.titlebar .ws-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text, var(--fg));
+  font-size: var(--fs-13, 13px);
+  font-weight: 650;
+}
+
+.titlebar .chip-caret {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: var(--fs-12, 12px);
+}
+
+.titlebar-leading > .tb-chip:only-child,
+.titlebar-leading-items > .tb-chip:only-child {
+  max-width: min(480px, 42vw);
+}
+
+.titlebar .chip-value.is-rtl {
+  direction: rtl;
+  text-align: left;
+}

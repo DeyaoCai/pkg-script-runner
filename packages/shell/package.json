@@ -24,9 +24,17 @@
       "import": "./dist/preload/index.js"
     },
     "./renderer/WindowControls.vue": "./src/renderer/WindowControls.vue",
+    "./renderer/TitleBarShell.vue": "./src/renderer/TitleBarShell.vue",
+    "./renderer/TitleBarChip.vue": "./src/renderer/TitleBarChip.vue",
+    "./renderer/TitleBarMeta.vue": "./src/renderer/TitleBarMeta.vue",
+    "./renderer/TitleBarAction.vue": "./src/renderer/TitleBarAction.vue",
+    "./renderer/ShellPanel.vue": "./src/renderer/ShellPanel.vue",
     "./renderer/tip.css": "./src/renderer/tip.css",
     "./renderer/drag.css": "./src/renderer/drag.css",
-    "./renderer/window-controls.css": "./src/renderer/window-controls.css"
+    "./renderer/window-controls.css": "./src/renderer/window-controls.css",
+    "./renderer/titlebar.css": "./src/renderer/titlebar.css",
+    "./renderer/titlebar-controls.css": "./src/renderer/titlebar-controls.css",
+    "./renderer/chrome.css": "./src/renderer/chrome.css"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -41,10 +49,14 @@
     "clean": "rimraf dist"
   },
   "peerDependencies": {
+    "@pkg-runner/assets": "*",
+    "@pkg-runner/controller": "*",
     "electron": ">=35",
     "vue": "^3.5.0"
   },
   "devDependencies": {
+    "@pkg-runner/assets": "workspace:*",
+    "@pkg-runner/controller": "workspace:*",
     "@types/node": "^20.0.0",
     "electron": "35.7.5",
     "rimraf": "^6.0.0",
