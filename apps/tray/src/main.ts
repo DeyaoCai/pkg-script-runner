@@ -748,6 +748,11 @@ function openSettingsWindow() {
       error: error instanceof Error ? error.message : String(error),
     });
   });
+  settingsWin.once('ready-to-show', () => {
+    if (!settingsWin || settingsWin.isDestroyed()) return;
+    settingsWin.show();
+    settingsWin.focus();
+  });
   settingsWin.webContents.on('dom-ready', () => {
     pushSettingsToWindow(settingsWin);
   });
