@@ -8,6 +8,7 @@ directories:
   buildResources: assets
 files:
   - dist/**/*
+  - dist-ui/**/*
   - ui/**/*
   - assets/installer.nsh
   - package.json
@@ -51,6 +52,10 @@ extraResources:
       - '**/*'
   - from: release-stage/code-editor
     to: code-editor
+    filter:
+      - '**/*'
+  - from: release-stage/desktop-zones
+    to: desktop-zones
     filter:
       - '**/*'
 win:

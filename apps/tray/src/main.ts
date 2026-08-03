@@ -13,6 +13,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromeBackground } from '@pkg-runner/tokens';
 import {
+  attachMaximizedEvents,
+  framelessWindowOptions,
+  registerWindowIpc,
+} from '@pkg-runner/shell/main';
+import {
   loadPrefs,
   savePrefs,
   settingsFromPrefs,
@@ -49,12 +54,20 @@ import {
   ensureScreenshotHistoryDir,
 } from './screenshotHistory.js';
 import {
+  applyEditorSettings,
   showEditorWindow,
   shutdownEditorHost,
   startEditorHost,
   toggleEditorWindow,
   warmEditorWindow,
 } from '../../code-editor/src/main/editorHost.js';
+import {
+  applyZonesSettings,
+  showZonesWindow,
+  shutdownZonesHost,
+  startZonesHost,
+  toggleZonesWindow,
+} from '../../desktop-zones/src/zonesHost.js';
 import {
   applyRunnerSettings,
   showRunnerWindow,
@@ -81,6 +94,10 @@ import { resolveEnvAssetPath } from '@pkg-runner/assets';
 
 function toggleEditor(): void {
   toggleEditorWindow();
+}
+
+function toggleZones(): void {
+  toggleZonesWindow();
 }
 
 function toggleRunner(): void {
@@ -163,13 +180,19 @@ if (process.platform === 'win32') {
   );
 }
 
-// 尽早设置，避免 runnerHost / editorHost 解析不到 resources 下的 UI
+// 尽早设置，避免 runnerHost / editorHost / zonesHost 解析不到 resources 下的 UI
 if (app.isPackaged) {
   if (!process.env.PKG_RUNNER_APP_DIR?.trim()) {
     process.env.PKG_RUNNER_APP_DIR = path.join(process.resourcesPath, 'runner');
   }
   if (!process.env.PKG_EDITOR_APP_DIR?.trim()) {
     process.env.PKG_EDITOR_APP_DIR = path.join(process.resourcesPath, 'code-editor');
+  }
+  if (!process.env.PKG_ZONES_APP_DIR?.trim()) {
+    process.env.PKG_ZONES_APP_DIR = path.join(
+      process.resourcesPath,
+      'desktop-zones',
+    );
   }
 }
 
@@ -193,6 +216,8 @@ syncBrandEnvFromPrefs();
 let tray: Tray | null = null;
 let settingsWin: BrowserWindow | null = null;
 let historyWin: BrowserWindow | null = null;
+let settingsWinDetachMax: (() => void) | null = null;
+let settingsWindowIpcRegistered = false;
 let registeredScreenshotHotkey = '';
 let registeredActivateHotkey = '';
 let registeredEditorHotkey = '';
@@ -347,6 +372,8 @@ function publishSettings(): void {
     editorHotkey: settings.editorHotkey,
   });
   applyRunnerSettings(settings);
+  applyEditorSettings(settings);
+  applyZonesSettings(settings);
 }
 
 function sendTo(win: BrowserWindow | null, channel: string, ...args: unknown[]) {
@@ -633,6 +660,53 @@ function pushSettingsToWindow(win: BrowserWindow | null): void {
   deliverSettingsToWindow(win, reloadPrefsFromDisk());
 }
 
+/** Vue MPA from @pkg-runner/tray-ui → dist-ui/; dev: PKG_TRAY_UI_URL=http://127.0.0.1:5202 */
+function loadTrayPanelPage(
+  win: BrowserWindow,
+  page: 'settings' | 'history',
+  query?: Record<string, string>,
+): void {
+  const base = process.env.PKG_TRAY_UI_URL?.trim();
+  if (base) {
+    const root = base.endsWith('/') ? base : `${base}/`;
+    const u = new URL(`${page}.html`, root);
+    if (query) {
+      for (const [k, v] of Object.entries(query)) u.searchParams.set(k, v);
+    }
+    void win.loadURL(u.toString());
+    return;
+  }
+  const file = path.join(APP_ROOT, 'dist-ui', `${page}.html`);
+  if (!fs.existsSync(file)) {
+    diagLog('tray', 'panel.ui-missing', { file, page });
+    console.error(
+      `[tray] missing ${file} — run: pnpm --filter @pkg-runner/tray-ui build`,
+    );
+  }
+  void win.loadFile(file, query ? { query } : undefined);
+}
+
+/** Avoid colliding with editor/zones `window:*` handlers in this process. */
+const SETTINGS_WINDOW_CHANNELS = {
+  minimize: 'tray-settings:window-minimize',
+  maximize: 'tray-settings:window-maximize',
+  close: 'tray-settings:window-close',
+  isMaximized: 'tray-settings:window-isMaximized',
+  maximizedChanged: 'tray-settings:window-maximized-changed',
+} as const;
+
+function ensureSettingsWindowIpc(): void {
+  if (settingsWindowIpcRegistered) return;
+  settingsWindowIpcRegistered = true;
+  registerWindowIpc({
+    getWindow: () => settingsWin,
+    channels: SETTINGS_WINDOW_CHANNELS,
+    onClose: (win) => {
+      win.close();
+    },
+  });
+}
+
 function openSettingsWindow() {
   if (!appReady) {
     pendingOpenSettings = true;
@@ -649,16 +723,24 @@ function openSettingsWindow() {
   const envLabel = activeBrandTone() === 'test' ? '测试' : '正式';
   const chromeBg = chromeBackground(activeBrandTone(), prefs.theme);
   const appIcon = resolveAppIconPath();
-  // 原生标题栏：显示「设置 · 测试/正式」+ 环境 icon（勿用 hidden overlay，否则顶栏无标题文字）
-  settingsWin = new BrowserWindow({
-    width: 520,
-    height: 700,
-    title: `设置 · ${envLabel}`,
-    icon: appIcon,
-    backgroundColor: chromeBg,
-    autoHideMenuBar: true,
-    webPreferences: panelWebPreferences(),
-  });
+  ensureSettingsWindowIpc();
+  settingsWin = new BrowserWindow(
+    framelessWindowOptions({
+      width: 520,
+      height: 720,
+      minWidth: 420,
+      minHeight: 480,
+      title: `设置 · ${envLabel}`,
+      icon: appIcon,
+      backgroundColor: chromeBg,
+      webPreferences: panelWebPreferences(),
+    }),
+  );
+  settingsWinDetachMax?.();
+  settingsWinDetachMax = attachMaximizedEvents(
+    settingsWin,
+    SETTINGS_WINDOW_CHANNELS.maximizedChanged,
+  );
   settingsWin.webContents.on('preload-error', (_e, preloadPath, error) => {
     console.error('[tray] settings preload-error', preloadPath, error);
     diagLog('tray', 'settings.preload-error', {
@@ -683,10 +765,12 @@ function openSettingsWindow() {
         diagLog('tray', 'settings.bridge-check', { hasApi: false });
       });
   });
-  void settingsWin.loadFile(path.join(APP_ROOT, 'ui', 'settings.html'), {
-    query: { env: activeBrandTone() === 'test' ? 'test' : 'prod' },
+  loadTrayPanelPage(settingsWin, 'settings', {
+    env: activeBrandTone() === 'test' ? 'test' : 'prod',
   });
   settingsWin.on('closed', () => {
+    settingsWinDetachMax?.();
+    settingsWinDetachMax = null;
     settingsWin = null;
   });
 }
@@ -705,7 +789,7 @@ function openHistoryWindow() {
     autoHideMenuBar: true,
     webPreferences: panelWebPreferences(),
   });
-  void historyWin.loadFile(path.join(APP_ROOT, 'ui', 'history.html'));
+  loadTrayPanelPage(historyWin, 'history');
   historyWin.on('closed', () => {
     historyWin = null;
   });
@@ -739,6 +823,10 @@ function updateTrayMenu() {
     {
       label: '显示/隐藏编辑器',
       click: () => toggleEditor(),
+    },
+    {
+      label: '显示/隐藏桌面整理',
+      click: () => toggleZones(),
     },
     { type: 'separator' },
     {
@@ -822,7 +910,8 @@ function handleTrayCmdFile(): void {
     if (parsed.cmd === 'open-settings') {
       openSettingsWindow();
     } else if (parsed.cmd === 'publish-settings') {
-      applyRunnerSettings(reloadPrefsFromDisk());
+      reloadPrefsFromDisk();
+      publishSettings();
     } else if (parsed.cmd === 'pull-settings' && typeof parsed.id === 'string') {
       const settings = reloadPrefsFromDisk();
       const replyFile = trayCmdReplyPath();
@@ -923,6 +1012,10 @@ function registerIpc() {
     showEditorWindow();
     return { ok: true as const };
   });
+  ipcMain.handle('tray:show-zones', () => {
+    showZonesWindow();
+    return { ok: true as const };
+  });
   ipcMain.handle('pkg:open-ss-history-dir', () => openScreenshotHistoryDir());
 
   registerScreenshotIpc({
@@ -966,6 +1059,12 @@ if (gotLock) {
           'code-editor',
         );
       }
+      if (!process.env.PKG_ZONES_APP_DIR?.trim()) {
+        process.env.PKG_ZONES_APP_DIR = path.join(
+          process.resourcesPath,
+          'desktop-zones',
+        );
+      }
     }
     const t0 = Date.now();
     diagLog('tray', 'app.ready', { prefsPath: sharedSettingsPath() });
@@ -984,7 +1083,14 @@ if (gotLock) {
       mode: 'embedded',
       getSharedSettings: () => settingsFromPrefs(prefs),
     });
-    await startEditorHost({ mode: 'embedded' });
+    await startEditorHost({
+      mode: 'embedded',
+      getSharedSettings: () => settingsFromPrefs(prefs),
+    });
+    await startZonesHost({
+      mode: 'embedded',
+      getSharedSettings: () => settingsFromPrefs(prefs),
+    });
     // 默认不预热 BrowserWindow：Chromium 冷启动 + Vite 会抢 CPU/磁盘卡主机
     // 需要预热：PKG_RUNNER_WARM=1（错峰单路，不叠三窗）
     publishSettings();
@@ -1021,6 +1127,7 @@ if (gotLock) {
       destroyCompositorKeepalive();
       shutdownRunnerHost();
       shutdownEditorHost();
+      shutdownZonesHost();
       return;
     }
     isQuitting = true;
@@ -1042,6 +1149,7 @@ if (gotLock) {
     destroyCompositorKeepalive();
     shutdownRunnerHost();
     shutdownEditorHost();
+    shutdownZonesHost();
   });
 
   app.on('will-quit', (e) => {

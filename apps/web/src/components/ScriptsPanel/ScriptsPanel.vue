@@ -7,9 +7,9 @@
           id="searchInput"
           type="search"
           spellcheck="false"
-          placeholder="模糊搜索…"
-          aria-label="按脚本名或命令筛选"
-          title="按脚本名或命令模糊筛选"
+          placeholder="模糊或 /正则/"
+          aria-label="按脚本名或命令筛选；可用 /pattern/flags 正则"
+          title="模糊匹配脚本名/命令；正则请写 /dev|build/i"
           :value="app.data.scriptSearch"
           @input="app.setScriptSearch(($event.target as HTMLInputElement).value)"
         />

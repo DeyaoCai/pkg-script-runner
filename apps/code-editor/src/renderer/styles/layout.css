@@ -1,13 +1,14 @@
 /**
  * Code Editor layout metrics on top of @pkg-runner/tokens.
- * Color aliases (--side/--cyan/…) live in tokens.css compat layer.
+ * Color / titlebar chrome come from shared tokens (+ shared-settings push).
+ * Do not override --titlebar-* here — keep chrome aligned with Runner / Settings.
  */
 :root {
   --diff-add: color-mix(in srgb, var(--color-success) 32%, var(--transparent));
   --diff-del: color-mix(in srgb, var(--color-danger) 32%, var(--transparent));
   --diff-hunk: var(--color-accent-soft-strong);
   --scroll-size: 8px;
-  --toolbar-h: 40px;
+  --toolbar-h: var(--titlebar-height, 48px);
   --zone-rail-h: 40px;
   --tab-h: 32px;
   --vcs-h: 220px;
@@ -15,34 +16,6 @@
   --tree-w: 260px;
   --git-tool-w: 420px;
   --activity-w: 48px;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
-}
-
-*::-webkit-scrollbar {
-  width: var(--scroll-size);
-  height: var(--scroll-size);
-}
-
-*::-webkit-scrollbar-track {
-  background: var(--scroll-track);
-  border-radius: 999px;
-}
-
-*::-webkit-scrollbar-thumb {
-  background: var(--scroll-thumb);
-  border-radius: 999px;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--scroll-thumb-hover);
 }
 
 html,

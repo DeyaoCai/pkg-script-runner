@@ -17,7 +17,10 @@
   "dependencies": {
     "@pkg-runner/assets": "workspace:*",
     "@pkg-runner/controller": "workspace:*",
+    "@pkg-runner/fonts": "workspace:*",
+    "@pkg-runner/shell": "workspace:*",
     "@pkg-runner/tokens": "workspace:*",
+    "@pkg-runner/ui": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "vue": "^3.5.0"

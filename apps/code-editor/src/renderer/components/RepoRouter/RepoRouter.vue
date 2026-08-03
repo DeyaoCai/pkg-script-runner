@@ -11,17 +11,25 @@
       <span class="name">{{ activeLabel }}</span>
       <span class="caret">{{ ctrl.state.menuOpen ? '▴' : '▾' }}</span>
     </button>
-    <div v-if="ctrl.state.menuOpen" class="panel">
-      <div class="panel-head">
+
+    <ShellPanel
+      :open="ctrl.state.menuOpen"
+      :teleported="false"
+      :width="280"
+      :ignore="[rootEl]"
+      @close="ctrl.closeMenu()"
+    >
+      <template #head>
         <span>仓库</span>
-        <span class="muted count">{{ ctrl.data.repos.length }}</span>
-        <span class="spacer" />
-        <button type="button" class="tool" @click="ctrl.expandAll()">展开</button>
-        <button type="button" class="tool" @click="ctrl.collapseAll()">收起</button>
-      </div>
-      <div v-if="!ctrl.data.workspaceRoot" class="hint">先选择工作区</div>
-      <div v-else-if="!ctrl.data.repos.length" class="hint">工作区内未发现仓库</div>
-      <ul v-else class="list">
+        <span class="ui-panel-muted">{{ ctrl.data.repos.length }}</span>
+        <span class="ui-panel-spacer" />
+        <button type="button" class="ui-panel-tool" @click="ctrl.expandAll()">展开</button>
+        <button type="button" class="ui-panel-tool" @click="ctrl.collapseAll()">收起</button>
+      </template>
+
+      <div v-if="!ctrl.data.workspaceRoot" class="ui-panel-hint">先选择工作区</div>
+      <div v-else-if="!ctrl.data.repos.length" class="ui-panel-hint">工作区内未发现仓库</div>
+      <ul v-else class="ui-panel-list">
         <RepoDropTreeNode
           v-for="node in ctrl.data.tree"
           :key="node.kind === 'dir' ? node.path : node.abs"
@@ -30,12 +38,13 @@
           :depth="0"
         />
       </ul>
-    </div>
+    </ShellPanel>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
+import { computed, ref } from 'vue';
+import ShellPanel from '@pkg-runner/shell/renderer/ShellPanel.vue';
 import RepoDropTreeNode from './RepoDropTreeNode.vue';
 import type { RepoRouterCtrl } from './RepoRouterCtrl.ts';
 
@@ -50,20 +59,6 @@ const activeLabel = computed(() => {
     return pr.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || pr;
   }
   return props.ctrl.data.workspaceRoot ? '未选择' : '—';
-});
-
-function onDocPointer(ev: PointerEvent): void {
-  if (!props.ctrl.state.menuOpen) return;
-  const el = rootEl.value;
-  if (el && ev.target instanceof Node && el.contains(ev.target)) return;
-  props.ctrl.closeMenu();
-}
-
-onMounted(() => {
-  document.addEventListener('pointerdown', onDocPointer, true);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', onDocPointer, true);
 });
 </script>
 
@@ -115,78 +110,5 @@ onBeforeUnmount(() => {
   color: var(--muted);
   flex-shrink: 0;
   font-size: 10px;
-}
-
-.panel {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 40;
-  width: 280px;
-  max-height: min(420px, 70vh);
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  overflow: hidden;
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-
-.count {
-  font-size: 11px;
-}
-
-.spacer {
-  flex: 1;
-}
-
-.tool {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  border-radius: 4px;
-  padding: 1px 6px;
-  font-size: 11px;
-  cursor: pointer;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.tool:hover {
-  color: var(--cyan);
-  border-color: var(--cyan);
-}
-
-.hint {
-  padding: 12px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 4px 0;
-  overflow: auto;
-  flex: 1;
-  min-height: 0;
-}
-
-.muted {
-  color: var(--muted);
 }
 </style>

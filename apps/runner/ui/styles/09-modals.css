@@ -249,14 +249,3 @@
   justify-content: flex-end;
   gap: 8px;
 }
-
-.btn.danger.solid {
-  background: var(--color-danger-press);
-  border-color: var(--color-danger-press);
-  color: var(--color-fg-on-danger);
-}
-
-.btn.danger.solid:hover:not(:disabled) {
-  background: var(--color-danger-hover);
-  border-color: var(--color-danger-hover);
-}

@@ -13,6 +13,13 @@ import {
   openPathWithDefault,
 } from '@pkg-runner/shell/main';
 import { resolveEnvAssetPath } from '@pkg-runner/assets';
+import { chromeBackground, type BrandTone } from '@pkg-runner/tokens';
+import {
+  coerceSharedSettings,
+  defaultSharedSettings,
+  readSharedSettingsFromDisk,
+  type SharedSettings,
+} from './sharedUi.js';
 import {
   listDir,
   readFileText,
@@ -57,6 +64,8 @@ export type EditorHostOptions = {
   startHidden?: boolean;
   /** Initial directory to open (CLI / explorer). */
   openDir?: string | null;
+  /** Tray injects live shared-settings (theme / brandColor / glass / font). */
+  getSharedSettings?: () => unknown;
 };
 
 const __dirnameHost = path.dirname(fileURLToPath(import.meta.url));
@@ -128,6 +137,43 @@ const termBridge = new TermBridge(() => mainWindow);
 let unsubWorkspace: (() => void) | null = null;
 /** True while this host is writing prefs — skip re-broadcast to own renderer. */
 let persistingLocal = false;
+let sharedUi: SharedSettings = defaultSharedSettings();
+let getSharedSettingsFn: (() => unknown) | null = null;
+
+function colorEnv(): BrandTone {
+  return process.env.PKG_RUNNER_COLOR_ENV?.trim().toLowerCase() === 'test'
+    ? 'test'
+    : 'prod';
+}
+
+function windowBackgroundForTheme(theme: 'dark' | 'light'): string {
+  return chromeBackground(colorEnv(), theme);
+}
+
+function pushSharedUiToRenderer(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('editor:shared-settings', sharedUi);
+}
+
+/** Apply tray / disk shared settings (theme · brandColor · glass · font). */
+export function applyEditorSettings(raw: unknown): void {
+  const next = coerceSharedSettings(raw);
+  if (!next) return;
+  const themeChanged = next.theme !== sharedUi.theme;
+  sharedUi = next;
+  if (themeChanged && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setBackgroundColor(windowBackgroundForTheme(sharedUi.theme));
+  }
+  pushSharedUiToRenderer();
+}
+
+function resolveInitialSharedUi(): SharedSettings {
+  if (getSharedSettingsFn) {
+    const next = coerceSharedSettings(getSharedSettingsFn());
+    if (next) return next;
+  }
+  return readSharedSettingsFromDisk();
+}
 
 function persist(): void {
   persistingLocal = true;
@@ -347,20 +393,17 @@ function createWindow(): void {
     mode: hostMode,
   });
 
-  const colorEnv =
-    process.env.PKG_RUNNER_COLOR_ENV?.trim().toLowerCase() === 'test'
-      ? 'test'
-      : 'prod';
-  const appIcon = resolveEnvAssetPath('icon', colorEnv);
+  const appIcon = resolveEnvAssetPath('icon', colorEnv());
   mainWindow = new BrowserWindow(
     framelessWindowOptions({
       width: 1280,
       height: 840,
       minWidth: 900,
       minHeight: 560,
-      title: colorEnv === 'test' ? 'Code Editor · 测试' : 'Code Editor',
+      title: colorEnv() === 'test' ? 'Code Editor · 测试' : 'Code Editor',
       icon: appIcon,
       show: false,
+      backgroundColor: windowBackgroundForTheme(sharedUi.theme),
       webPreferences: {
         preload,
       },
@@ -389,6 +432,12 @@ function createWindow(): void {
     showWindow();
   });
   attachMaximizedEvents(mainWindow);
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    pushSharedUiToRenderer();
+    // renderer mount may lag slightly
+    setTimeout(pushSharedUiToRenderer, 120);
+  });
 
   const devUrl = process.env.CODE_EDITOR_DEV_URL?.trim();
   if (devUrl && !app.isPackaged) {
@@ -665,6 +714,8 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('term:list', () => termBridge.list());
+
+  ipcMain.handle('editor:get-shared-settings', () => sharedUi);
 }
 
 export async function startEditorHost(
@@ -672,6 +723,8 @@ export async function startEditorHost(
 ): Promise<void> {
   hostMode = opts.mode ?? 'standalone';
   startHidden = !!opts.startHidden;
+  getSharedSettingsFn = opts.getSharedSettings ?? null;
+  sharedUi = resolveInitialSharedUi();
 
   prefs = readWorkspacePrefs();
   unsubWorkspace?.();

@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(root, '../..');
 const tokensPkg = path.join(repoRoot, 'packages/tokens');
+const fontsPkg = path.join(repoRoot, 'packages/fonts');
+const uiPkg = path.join(repoRoot, 'packages/ui');
+const assetsPkg = path.join(repoRoot, 'packages/assets');
 
 export default defineConfig({
   root,
@@ -22,8 +25,27 @@ export default defineConfig({
         replacement: path.join(tokensPkg, 'tokens.css'),
       },
       {
+        find: '@pkg-runner/tokens/chrome.css',
+        replacement: path.join(
+          repoRoot,
+          'packages/shell/src/renderer/chrome.css',
+        ),
+      },
+      {
         find: '@pkg-runner/tokens',
         replacement: path.join(tokensPkg, 'src/index.ts'),
+      },
+      {
+        find: '@pkg-runner/fonts',
+        replacement: fontsPkg,
+      },
+      {
+        find: '@pkg-runner/ui',
+        replacement: uiPkg,
+      },
+      {
+        find: '@pkg-runner/assets/media',
+        replacement: path.join(assetsPkg, 'media'),
       },
       {
         find: '@pkg-runner/controller',
@@ -37,19 +59,43 @@ export default defineConfig({
         ),
       },
       {
-        find: '@pkg-runner/shell/renderer/tip.css',
-        replacement: path.join(repoRoot, 'packages/shell/src/renderer/tip.css'),
-      },
-      {
-        find: '@pkg-runner/shell/renderer/drag.css',
-        replacement: path.join(repoRoot, 'packages/shell/src/renderer/drag.css'),
-      },
-      {
-        find: '@pkg-runner/shell/renderer/window-controls.css',
+        find: '@pkg-runner/shell/renderer/TitleBarShell.vue',
         replacement: path.join(
           repoRoot,
-          'packages/shell/src/renderer/window-controls.css',
+          'packages/shell/src/renderer/TitleBarShell.vue',
         ),
+      },
+      {
+        find: '@pkg-runner/shell/renderer/TitleBarChip.vue',
+        replacement: path.join(
+          repoRoot,
+          'packages/shell/src/renderer/TitleBarChip.vue',
+        ),
+      },
+      {
+        find: '@pkg-runner/shell/renderer/TitleBarMeta.vue',
+        replacement: path.join(
+          repoRoot,
+          'packages/shell/src/renderer/TitleBarMeta.vue',
+        ),
+      },
+      {
+        find: '@pkg-runner/shell/renderer/TitleBarAction.vue',
+        replacement: path.join(
+          repoRoot,
+          'packages/shell/src/renderer/TitleBarAction.vue',
+        ),
+      },
+      {
+        find: '@pkg-runner/shell/renderer/ShellPanel.vue',
+        replacement: path.join(
+          repoRoot,
+          'packages/shell/src/renderer/ShellPanel.vue',
+        ),
+      },
+      {
+        find: '@pkg-runner/shell/renderer/tip.css',
+        replacement: path.join(repoRoot, 'packages/shell/src/renderer/tip.css'),
       },
       {
         find: /^@pkg-runner\/shell\/renderer$/,

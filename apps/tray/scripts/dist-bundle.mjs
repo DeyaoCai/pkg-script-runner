@@ -4,6 +4,7 @@
  * Expects prior:
  *   pnpm --filter @pkg-runner/runner build
  *   pnpm --filter @pkg-runner/code-editor build
+ *   pnpm --filter @pkg-runner/desktop-zones build
  *   pnpm --filter @pkg-runner/tray build
  */
 import fs from 'node:fs';
@@ -16,6 +17,7 @@ const trayRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.join(trayRoot, '..', '..');
 const runnerRoot = path.join(repoRoot, 'apps', 'runner');
 const editorRoot = path.join(repoRoot, 'apps', 'code-editor');
+const zonesRoot = path.join(repoRoot, 'apps', 'desktop-zones');
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
@@ -83,6 +85,22 @@ if (fs.existsSync(trayEditorPreload)) {
   fs.mkdirSync(distStage, { recursive: true });
   fs.copyFileSync(trayEditorPreload, path.join(distStage, 'preload.cjs'));
   console.log('[tray-dist] staged editor preload fallback');
+}
+
+const zonesStage = path.join(stageRoot, 'desktop-zones');
+const zonesRenderer = path.join(zonesRoot, 'dist', 'renderer');
+if (fs.existsSync(zonesRenderer)) {
+  copyDir(zonesRenderer, path.join(zonesStage, 'dist', 'renderer'));
+  console.log('[tray-dist] staged desktop-zones renderer');
+} else {
+  console.warn('[tray-dist] desktop-zones dist/renderer not found — run pnpm --filter @pkg-runner/desktop-zones build');
+}
+const trayZonesPreload = path.join(trayRoot, 'dist', 'zones', 'preload.cjs');
+if (fs.existsSync(trayZonesPreload)) {
+  const distStage = path.join(zonesStage, 'dist');
+  fs.mkdirSync(distStage, { recursive: true });
+  fs.copyFileSync(trayZonesPreload, path.join(distStage, 'preload.cjs'));
+  console.log('[tray-dist] staged zones preload');
 }
 
 const build = spawnSync(

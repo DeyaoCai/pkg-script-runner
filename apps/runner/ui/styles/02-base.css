@@ -1,36 +1,3 @@
-* {
-  box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
-}
-
-*::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-*::-webkit-scrollbar-track {
-  background: var(--scroll-track);
-  border-radius: 999px;
-}
-
-*::-webkit-scrollbar-thumb {
-  background: var(--scroll-thumb);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--scroll-thumb-hover);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-*::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
 html {
   margin: 0;
   height: 100%;
@@ -57,7 +24,6 @@ button,
 input,
 textarea,
 select {
-  font: inherit;
   font-size: var(--fs-12);
 }
 
@@ -130,42 +96,9 @@ select {
   z-index: 200;
 }
 
-/* Frosted look without live backdrop-filter (Win 拖窗会闪)；不透明窗用实色面板即可 */
-.glass-surface {
-  background: var(--panel);
-  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--neutral-0) 8%, transparent),
-    0 8px 24px color-mix(in srgb, var(--color-shadow) 35%, transparent);
-}
-
-html[data-theme='light'] .glass-surface {
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--neutral-0) 70%, transparent),
-    0 8px 24px var(--color-shadow);
-}
-
-/* 路径 / 搜索仍可编辑选中 */
-input,
-textarea {
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-/* Keyboard / a11y focus — only when focus is not from mouse */
-:focus {
-  outline: none;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-
 .script-row:focus-visible,
 .project-item-select:focus-visible,
 .log-tab:focus-visible,
-.btn:focus-visible,
 .win-btn:focus-visible,
 .log-tab-add:focus-visible,
 .log-tab-layout:focus-visible,

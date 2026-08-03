@@ -9,11 +9,13 @@
   "main": "dist/main.js",
   "files": [
     "dist",
+    "dist-ui",
     "ui",
     "assets"
   ],
   "dependencies": {
     "@pkg-runner/assets": "workspace:*",
+    "@pkg-runner/shell": "workspace:*",
     "@pkg-runner/tokens": "workspace:*",
     "koffi": "^3.1.2",
     "node-pty": "^1.1.0"
@@ -27,13 +29,14 @@
     "typescript": "^5.5.0"
   },
   "scripts": {
+    "build:ui": "pnpm --filter @pkg-runner/tray-ui build",
     "build:main": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && node ./scripts/build-main.mjs",
-    "build": "pnpm build:main",
+    "build": "pnpm build:ui && pnpm build:main",
     "build:dev": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && node ./scripts/build-main.mjs --dev",
     "dev": "node ./scripts/dev.mjs",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rimraf dist release",
+    "clean": "rimraf dist dist-ui release",
     "dist:win": "node ./scripts/dist-bundle.mjs",
     "dist:win:dir": "electron-builder --win dir --x64",
     "dist:win:nsis": "electron-builder --win nsis --x64"

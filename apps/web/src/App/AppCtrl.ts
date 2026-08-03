@@ -3,7 +3,9 @@ import {
   BRAND_PRESET_PROD,
   applyBrandColor as setBrandTone,
   applyColorEnv as setColorEnv,
+  applyFontId,
   applyGlass as setGlass,
+  applySharedUiSettings,
   applyTheme as setUiTheme,
   normalizeBrandColor,
 } from '@pkg-runner/tokens';
@@ -17,8 +19,7 @@ import type {
   PkgRunnerColorEnv,
 } from '../env';
 import { ansiToHtml } from '../lib/ansi';
-import { applyDocumentFonts } from '../lib/fonts';
-import { fuzzyBestScore, sameDir } from '../lib/fuzzy';
+import { filterBestScore, fuzzyBestScore, sameDir } from '../lib/fuzzy';
 import { tryPkgApi } from '../composables/usePkgApi';
 import { ScriptsPanelCtrl } from '../components/ScriptsPanel/ScriptsPanelCtrl';
 import { LogPanelCtrl } from '../components/LogPanel/LogPanelCtrl';
@@ -278,7 +279,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     const q = this.data.scriptSearch.trim();
     if (!q) return scripts;
     return scripts
-      .map((s) => ({ s, score: fuzzyBestScore(q, [s.name, s.command]) }))
+      .map((s) => ({ s, score: filterBestScore(q, [s.name, s.command]) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .map((x) => x.s);
@@ -521,22 +522,22 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
 
   setFont(id: string): void {
     this.setData({ fontId: id });
-    applyDocumentFonts(id);
+    applyFontId(id);
   }
 
   applySettings(s: AppSettings): void {
     Object.assign(this.data.settings, s);
     this.setData({ persistLogs: s.persistLogs });
-    this.applyTheme(s.theme === 'light' ? 'light' : 'dark');
-    this.applyGlassVars(s.glassAlpha, this.data.glassBlur);
-    this.setFont(s.fontId || 'jetbrains');
-    // data-env / icon 跟运行环境；设置变更不切换整套色板
-    this.applyColorEnv(this.api?.getColorEnv?.() ?? this.data.colorEnv ?? 'prod');
-    if (typeof s.brandColor === 'string' && s.brandColor.trim()) {
-      this.applyBrandColor(s.brandColor);
-    }
-    const cols = Math.min(4, Math.max(1, s.shellMosaicCols || 2));
-    document.documentElement.style.setProperty('--shell-mosaic-cols', String(cols));
+    const env = this.api?.getColorEnv?.() ?? this.data.colorEnv ?? 'prod';
+    applySharedUiSettings(s, { colorEnv: env });
+    this.setData({
+      theme: s.theme === 'light' ? 'light' : 'dark',
+      glassAlpha: s.glassAlpha,
+      fontId: s.fontId || 'jetbrains',
+      colorEnv: env === 'test' ? 'test' : 'prod',
+    });
+    document.title =
+      env === 'test' ? 'Pkg Runner · 测试' : 'Pkg Runner';
   }
 
   bootstrap(): (() => void) | void {

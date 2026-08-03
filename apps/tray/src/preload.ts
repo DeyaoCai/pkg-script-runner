@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { createWindowPreloadApi } from '@pkg-runner/shell/preload';
 
 export type SharedSettings = {
   screenshotHotkey: string;
@@ -24,6 +25,14 @@ export type TrayProfileInfo = {
   settingsPath: string;
   packaged: boolean;
 };
+
+const windowApi = createWindowPreloadApi(ipcRenderer, {
+  minimize: 'tray-settings:window-minimize',
+  maximize: 'tray-settings:window-maximize',
+  close: 'tray-settings:window-close',
+  isMaximized: 'tray-settings:window-isMaximized',
+  maximizedChanged: 'tray-settings:window-maximized-changed',
+});
 
 const api = {
   getSettings: (): Promise<SharedSettings> => ipcRenderer.invoke('tray:get-settings'),
@@ -76,11 +85,14 @@ const api = {
     dir: string;
     error: string | null;
   }> => ipcRenderer.invoke('pkg:open-ss-history-dir'),
+  /** Closes the calling window (settings or history). */
   closeWindow: (): Promise<void> => ipcRenderer.invoke('tray:window-close'),
   showRunner: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('tray:show-runner'),
   showEditor: (): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('tray:show-editor'),
+  showZones: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('tray:show-zones'),
   diagLog: (event: string, detail?: unknown): Promise<void> =>
     ipcRenderer.invoke('tray:diag-log', event, detail),
   openDiagLog: (): Promise<string> => ipcRenderer.invoke('tray:open-diag-log'),
@@ -96,6 +108,8 @@ const api = {
     ipcRenderer.on('pkg:ss-history', handler);
     return () => ipcRenderer.removeListener('pkg:ss-history', handler);
   },
+  /** Settings TitleBarShell bridge (settings window only). */
+  ...windowApi,
 };
 
 contextBridge.exposeInMainWorld('trayApi', api);

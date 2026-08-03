@@ -1,27 +1,22 @@
 import { createApp } from 'vue';
 import { installTip } from '@pkg-runner/shell/renderer';
-import { bootDocumentTheme } from '@pkg-runner/tokens';
+import { bootSharedUi } from '@pkg-runner/tokens';
 import '@pkg-runner/shell/renderer/tip.css';
-import '@pkg-runner/shell/renderer/drag.css';
-import '@pkg-runner/shell/renderer/window-controls.css';
-import '../../../runner/ui/fonts/jetbrains-mono.css';
+import '@pkg-runner/fonts/jetbrains-mono-compact.css';
 import '@pkg-runner/tokens/tokens.css';
+import '@pkg-runner/tokens/chrome.css';
+import '@pkg-runner/ui/controls.css';
 import './styles/layout.css';
 import CodeEditorShell from './CodeEditorShell/CodeEditorShell.vue';
 
-function resolveColorEnv(): 'prod' | 'test' {
-  try {
-    const fromApi = window.codeEditor?.getColorEnv?.();
-    if (fromApi === 'test' || fromApi === 'prod') return fromApi;
-  } catch {
-    /* ignore */
-  }
-  return 'prod';
-}
-
-bootDocumentTheme({
-  colorEnv: resolveColorEnv(),
+bootSharedUi({
+  colorEnv: window.codeEditor?.getColorEnv?.() === 'test' ? 'test' : 'prod',
   titleForEnv: (env) => (env === 'test' ? 'Code Editor · 测试' : 'Code Editor'),
+  bridge: {
+    getColorEnv: () => window.codeEditor?.getColorEnv?.() ?? 'prod',
+    getSharedSettings: () => window.codeEditor?.getSharedSettings?.(),
+    onSharedSettings: (cb) => window.codeEditor?.onSharedSettings?.(cb),
+  },
 });
 
 const app = createApp(CodeEditorShell);

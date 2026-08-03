@@ -10,15 +10,18 @@ import { fileURLToPath } from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runnerRoot = path.join(root, '..', 'runner');
 const editorRoot = path.join(root, '..', 'code-editor');
+const zonesRoot = path.join(root, '..', 'desktop-zones');
 const distOut = path.join(root, 'dist');
 const runnerDistOut = path.join(distOut, 'runner');
 const editorDistOut = path.join(distOut, 'editor');
+const zonesDistOut = path.join(distOut, 'zones');
 const dev = process.argv.includes('--dev');
 
 fs.rmSync(distOut, { recursive: true, force: true });
 fs.mkdirSync(distOut, { recursive: true });
 fs.mkdirSync(runnerDistOut, { recursive: true });
 fs.mkdirSync(editorDistOut, { recursive: true });
+fs.mkdirSync(zonesDistOut, { recursive: true });
 
 const shared = {
   bundle: true,
@@ -76,4 +79,17 @@ await esbuild.build({
   external: ['electron'],
 });
 
-console.log('[tray] esbuild ok (embedded runnerHost + editorHost)');
+/** Desktop Zones UI preload (same process) */
+await esbuild.build({
+  bundle: true,
+  platform: 'node',
+  target: 'node20',
+  sourcemap: false,
+  minify: false,
+  entryPoints: [path.join(zonesRoot, 'src/preload.ts')],
+  outfile: path.join(zonesDistOut, 'preload.cjs'),
+  format: 'cjs',
+  external: ['electron'],
+});
+
+console.log('[tray] esbuild ok (embedded runnerHost + editorHost + zonesHost)');

@@ -23,6 +23,44 @@ export function fuzzyBestScore(query: string, fields: string[]): number {
   return best;
 }
 
+/** `/pattern/flags` → RegExp；否则走模糊。去掉 `g`，避免 `.test` 的 lastIndex 副作用。 */
+export function parseSearchQuery(
+  query: string,
+):
+  | { kind: 'empty' }
+  | { kind: 'fuzzy'; q: string }
+  | { kind: 'regex'; re: RegExp }
+  | { kind: 'bad-regex' } {
+  const raw = query.trim();
+  if (!raw) return { kind: 'empty' };
+  const m = /^\/([\s\S]*)\/([gimsuy]*)$/.exec(raw);
+  if (!m) return { kind: 'fuzzy', q: raw };
+  const flags = (m[2] || '').replace(/g/g, '');
+  try {
+    return { kind: 'regex', re: new RegExp(m[1], flags) };
+  } catch {
+    return { kind: 'bad-regex' };
+  }
+}
+
+/** 脚本/仓库筛选：普通文本模糊；`/dev|build/i` 等为正则。 */
+export function filterBestScore(query: string, fields: string[]): number {
+  const parsed = parseSearchQuery(query);
+  if (parsed.kind === 'empty') return 1;
+  if (parsed.kind === 'bad-regex') return 0;
+  if (parsed.kind === 'fuzzy') return fuzzyBestScore(parsed.q, fields);
+  let best = 0;
+  for (const f of fields) {
+    const text = f || '';
+    parsed.re.lastIndex = 0;
+    if (!parsed.re.test(text)) continue;
+    parsed.re.lastIndex = 0;
+    const idx = text.search(parsed.re);
+    best = Math.max(best, 100 - Math.min(50, idx < 0 ? 50 : idx));
+  }
+  return best;
+}
+
 export function sameDir(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false;
   const norm = (p: string) => p.replace(/[\\/]+$/, '').toLowerCase();

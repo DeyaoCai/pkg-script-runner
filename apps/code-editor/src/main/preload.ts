@@ -10,6 +10,16 @@ function resolveColorEnv(): 'prod' | 'test' {
 const api = {
   /** Sync — apply before first paint (`data-env` / brand tone). */
   getColorEnv: (): 'prod' | 'test' => resolveColorEnv(),
+  getSharedSettings: () => ipcRenderer.invoke('editor:get-shared-settings'),
+  onSharedSettings: (cb: (settings: unknown) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, settings: unknown) => {
+      cb(settings);
+    };
+    ipcRenderer.on('editor:shared-settings', handler);
+    return () => {
+      ipcRenderer.removeListener('editor:shared-settings', handler);
+    };
+  },
   getNav: () => ipcRenderer.invoke('nav:get'),
   pickWorkspace: () => ipcRenderer.invoke('workspace:pick'),
   openWorkspace: (dir: string) => ipcRenderer.invoke('workspace:open', dir),

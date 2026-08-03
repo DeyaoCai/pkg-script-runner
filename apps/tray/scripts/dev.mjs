@@ -17,9 +17,14 @@ const trayRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.join(trayRoot, '..', '..');
 const runnerRoot = path.join(repoRoot, 'apps', 'runner');
 const editorRoot = path.join(repoRoot, 'apps', 'code-editor');
+const zonesRoot = path.join(repoRoot, 'apps', 'desktop-zones');
 const UI_URL = process.env.PKG_RUNNER_UI_URL?.trim() || 'http://127.0.0.1:5200';
 const EDITOR_URL =
   process.env.CODE_EDITOR_DEV_URL?.trim() || 'http://127.0.0.1:5201';
+const TRAY_UI_URL =
+  process.env.PKG_TRAY_UI_URL?.trim() || 'http://127.0.0.1:5202';
+const ZONES_UI_URL =
+  process.env.PKG_ZONES_UI_URL?.trim() || 'http://127.0.0.1:5203';
 
 const argv = process.argv.slice(2);
 const wantHmr =
@@ -203,12 +208,30 @@ function ensureStaticUi() {
       'build:renderer',
     ]);
   }
+  const trayPanel = path.join(trayRoot, 'dist-ui', 'settings.html');
+  if (!fs.existsSync(trayPanel)) {
+    console.log('[dev] building tray-ui dist-ui (once, no Vite)…');
+    runSync(repoRoot, 'pnpm', ['--filter', '@pkg-runner/tray-ui', 'build']);
+  }
+  const zonesUi = path.join(zonesRoot, 'dist', 'renderer', 'index.html');
+  if (!fs.existsSync(zonesUi)) {
+    console.log('[dev] building desktop-zones renderer (once, no Vite)…');
+    runSync(repoRoot, 'pnpm', [
+      '--filter',
+      '@pkg-runner/desktop-zones',
+      'build:renderer',
+    ]);
+  }
 }
 
 /** @type {{ proc: import('node:child_process').ChildProcess | null, started: boolean }} */
 let runnerVite = { proc: null, started: false };
 /** @type {{ proc: import('node:child_process').ChildProcess | null, started: boolean }} */
 let editorVite = { proc: null, started: false };
+/** @type {{ proc: import('node:child_process').ChildProcess | null, started: boolean }} */
+let trayUiVite = { proc: null, started: false };
+/** @type {{ proc: import('node:child_process').ChildProcess | null, started: boolean }} */
+let zonesVite = { proc: null, started: false };
 
 if (wantHmr) {
   console.log('[dev] HMR mode — starting Vite (may spike CPU)');
@@ -217,6 +240,12 @@ if (wantHmr) {
     EDITOR_URL,
     '@pkg-runner/code-editor',
     'editor',
+  );
+  trayUiVite = await ensureVite(TRAY_UI_URL, '@pkg-runner/tray-ui', 'tray-ui');
+  zonesVite = await ensureVite(
+    ZONES_UI_URL,
+    '@pkg-runner/desktop-zones',
+    'zones',
   );
 } else {
   console.log(
@@ -244,6 +273,7 @@ const electronEnv = {
   ...process.env,
   PKG_RUNNER_APP_DIR: runnerRoot,
   PKG_EDITOR_APP_DIR: editorRoot,
+  PKG_ZONES_APP_DIR: zonesRoot,
   PKG_RUNNER_COLOR_ENV: colorEnv,
   PKG_RUNNER_COLOR_FORCE: wantProdColor ? '1' : '0',
   // 默认不注入 Vite URL → loadMainWindow 走 dist-ui
@@ -251,12 +281,16 @@ const electronEnv = {
     ? {
         PKG_RUNNER_UI_URL: UI_URL,
         CODE_EDITOR_DEV_URL: EDITOR_URL,
+        PKG_TRAY_UI_URL: TRAY_UI_URL,
+        PKG_ZONES_UI_URL: ZONES_UI_URL,
         PKG_RUNNER_UI_DEV: '1',
       }
     : {
         // 清掉外部环境里残留的 Vite 指向，避免误走 5200
         PKG_RUNNER_UI_URL: '',
         CODE_EDITOR_DEV_URL: '',
+        PKG_TRAY_UI_URL: '',
+        PKG_ZONES_UI_URL: '',
         VITE_DEV_SERVER_URL: '',
         PKG_RUNNER_UI_DEV: '0',
       }),
@@ -280,6 +314,12 @@ function stopVites() {
   }
   if (editorVite.started && editorVite.proc) {
     killProcessTree(editorVite.proc, 'editor-vite');
+  }
+  if (trayUiVite.started && trayUiVite.proc) {
+    killProcessTree(trayUiVite.proc, 'tray-ui-vite');
+  }
+  if (zonesVite.started && zonesVite.proc) {
+    killProcessTree(zonesVite.proc, 'zones-vite');
   }
 }
 

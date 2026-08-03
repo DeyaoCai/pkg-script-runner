@@ -1,8 +1,12 @@
-import { Controller } from '@pkg-runner/controller';
+import {
+  TitleBarShellCtrl,
+  defaultTitleBarShellData,
+  type TitleBarShellData,
+} from '@pkg-runner/shell/renderer';
 import type { TWindowBridge } from '@pkg-runner/shell/renderer';
 import type { CodeEditorShellCtrl } from '../../CodeEditorShell/CodeEditorShellCtrl.ts';
 
-type TData = {
+type TData = TitleBarShellData & {
   workspaceRoot: string | null;
   cwd: string | null;
   projectRoot: string | null;
@@ -10,19 +14,23 @@ type TData = {
   cwdRel: string;
   canGoParent: boolean;
   projectLocked: boolean;
-  maximized: boolean;
 };
 
 type TProps = Record<string, never>;
 type TState = { busy: boolean };
 
-export class ProjectToolbarCtrl extends Controller<TData, TProps, TState> {
+export class ProjectToolbarCtrl extends TitleBarShellCtrl<TData, TProps, TState> {
   private shell: CodeEditorShellCtrl | null = null;
   private offMaximized: (() => void) | null = null;
 
   constructor() {
     super({
       data: {
+        ...defaultTitleBarShellData({
+          productName: 'Code Editor',
+          subtitle: '',
+          colorEnv: 'prod',
+        }),
         workspaceRoot: null,
         cwd: null,
         projectRoot: null,
@@ -30,21 +38,29 @@ export class ProjectToolbarCtrl extends Controller<TData, TProps, TState> {
         cwdRel: '',
         canGoParent: false,
         projectLocked: false,
-        maximized: false,
       },
       props: {},
       state: { busy: false },
     });
   }
 
+  getWindowApi(): TWindowBridge | null {
+    return this.shell?.bridge ?? null;
+  }
+
   bindShell(shell: CodeEditorShellCtrl): void {
     this.shell = shell;
-    void this.shell.bridge.windowIsMaximized().then((v) => {
-      this.setData({ maximized: v });
-    });
+    void this.refreshMaximized();
     this.offMaximized?.();
-    this.offMaximized = this.shell.bridge.onMaximizedChange((maximized) => {
-      this.setData({ maximized });
+    this.offMaximized = this.bindMaximizedEvents();
+    const env =
+      typeof window !== 'undefined' && window.codeEditor?.getColorEnv?.() === 'test'
+        ? 'test'
+        : 'prod';
+    this.setBrand({
+      productName: 'Code Editor',
+      subtitle: '',
+      colorEnv: env,
     });
   }
 
@@ -96,13 +112,5 @@ export class ProjectToolbarCtrl extends Controller<TData, TProps, TState> {
 
   async onShowInExplorer(): Promise<void> {
     await this.shell?.showInExplorer(null);
-  }
-
-  get windowBridge(): TWindowBridge | null {
-    return this.shell?.bridge ?? null;
-  }
-
-  setMaximized(value: boolean): void {
-    this.setData({ maximized: value });
   }
 }

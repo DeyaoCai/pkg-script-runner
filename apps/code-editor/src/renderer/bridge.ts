@@ -36,6 +36,14 @@ export type TGitChangeDto = {
 export type TCodeEditorBridge = {
   /** Sync — set data-env / brand before paint. */
   getColorEnv: () => 'prod' | 'test';
+  getSharedSettings: () => Promise<{
+    theme: 'dark' | 'light';
+    brandColor: string;
+    glassAlpha: number;
+    fontId: string;
+    [key: string]: unknown;
+  }>;
+  onSharedSettings: (cb: (settings: unknown) => void) => () => void;
   getNav: () => Promise<TNavSnapshot>;
   pickWorkspace: () => Promise<TNavSnapshot>;
   openWorkspace: (dir: string) => Promise<TNavSnapshot>;
