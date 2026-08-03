@@ -1,0 +1,21 @@
+{
+  "name": "@pkg-runner/ui",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "author": "DeyaoCai",
+  "type": "module",
+  "description": "Shared CSS primitives (base / btn / seg / field / glass / panel). Import after @pkg-runner/tokens/tokens.css.",
+  "exports": {
+    "./base.css": "./base.css",
+    "./btn.css": "./btn.css",
+    "./seg.css": "./seg.css",
+    "./field.css": "./field.css",
+    "./glass.css": "./glass.css",
+    "./panel.css": "./panel.css",
+    "./controls.css": "./controls.css"
+  },
+  "files": [
+    "*.css"
+  ]
+}

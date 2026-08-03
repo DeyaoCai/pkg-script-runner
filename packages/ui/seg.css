@@ -1,0 +1,78 @@
+/* Inline segmented control (settings) + grid variant (theme panel) */
+
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line, var(--border));
+  border-radius: 8px;
+  background: var(--bg-input, var(--color-bg-row));
+}
+
+.seg button,
+.seg-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted, var(--color-fg-muted));
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 550;
+}
+
+.seg button:hover,
+.seg-btn:hover {
+  color: var(--fg, var(--text));
+  background: var(--color-bg-row-hover, transparent);
+}
+
+.seg button.is-active,
+.seg-btn.is-active {
+  background: var(--accent-soft, var(--color-accent-soft-strong));
+  color: var(--accent, var(--color-fg-on-accent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Runner theme panel: two equal columns */
+.seg.seg-grid,
+.theme-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  width: 100%;
+}
+
+.theme-seg .theme-seg-btn,
+.seg.seg-grid button,
+.seg.seg-grid .seg-btn {
+  border: 1px solid var(--color-border, var(--line));
+  border-radius: 8px;
+  background: var(--color-bg-row, var(--bg-input));
+  color: var(--color-fg, var(--fg));
+  padding: 8px 10px;
+  font-size: var(--fs-12, inherit);
+  font-family: inherit;
+  font-weight: normal;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.theme-seg .theme-seg-btn:hover,
+.seg.seg-grid button:hover,
+.seg.seg-grid .seg-btn:hover {
+  background: var(--color-bg-row-hover, var(--row-hover));
+  color: var(--color-fg, var(--fg));
+}
+
+.theme-seg .theme-seg-btn.is-active,
+.seg.seg-grid button.is-active,
+.seg.seg-grid .seg-btn.is-active {
+  border-color: var(--color-border-strong, var(--accent));
+  background: var(--color-accent-soft-strong, var(--accent-soft));
+  color: var(--color-fg-on-accent, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--color-accent-inset, color-mix(in srgb, var(--accent) 35%, transparent));
+}

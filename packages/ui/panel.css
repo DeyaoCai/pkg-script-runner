@@ -1,0 +1,147 @@
+/**
+ * Floating / dropdown panel chrome.
+ * Pair with .glass-surface for raised look; Vue host: ShellPanel.
+ */
+
+.ui-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: min(420px, 60vh);
+  border-radius: var(--app-radius, 10px);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.ui-panel--dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 280px;
+}
+
+.ui-panel--anchored {
+  position: fixed;
+  z-index: 300;
+}
+
+.ui-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-bottom: 1px solid var(--border, var(--line));
+  font-size: var(--fs-13, 13px);
+  font-weight: 650;
+  flex-shrink: 0;
+  color: var(--text, var(--fg));
+}
+
+.ui-panel-head .ui-panel-muted,
+.ui-panel-head .muted {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: var(--fs-12, 12px);
+}
+
+.ui-panel-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.ui-panel-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ui-panel-search {
+  margin-left: auto;
+  width: 140px;
+  border: 1px solid var(--border, var(--line));
+  border-radius: 6px;
+  background: var(--row, var(--panel));
+  color: var(--text, var(--fg));
+  font: inherit;
+  font-size: var(--fs-12, 12px);
+  padding: 5px 8px;
+}
+
+.ui-panel-tool {
+  border: 1px solid var(--border, var(--line));
+  background: transparent;
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font: inherit;
+  font-size: var(--fs-11, 11px);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ui-panel-tool:hover {
+  color: var(--accent, var(--cyan));
+  border-color: var(--accent, var(--cyan));
+}
+
+.ui-panel-hint {
+  padding: var(--space-4, 16px) var(--space-3, 12px);
+  color: var(--muted);
+  font-size: var(--fs-12, 12px);
+}
+
+.ui-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2, 8px);
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.ui-panel-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text, var(--fg));
+  padding: 10px var(--space-3, 12px);
+  cursor: pointer;
+  font: inherit;
+}
+
+.ui-panel-item:hover {
+  background: var(--row-hover, color-mix(in srgb, var(--text, #fff) 8%, transparent));
+}
+
+.ui-panel-item.is-active,
+.ui-panel-item.active {
+  background: var(--active);
+  color: var(--color-fg-on-accent, var(--text));
+}
+
+.ui-panel-item-title {
+  font-size: var(--fs-13, 13px);
+  font-weight: 650;
+}
+
+.ui-panel-item-meta {
+  display: flex;
+  gap: var(--space-2, 8px);
+  font-size: var(--fs-12, 12px);
+  opacity: 0.85;
+  min-width: 0;
+}
+
+.ui-panel-item-meta > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
