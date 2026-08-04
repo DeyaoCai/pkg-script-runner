@@ -29,6 +29,7 @@
     "./renderer/TitleBarMeta.vue": "./src/renderer/TitleBarMeta.vue",
     "./renderer/TitleBarAction.vue": "./src/renderer/TitleBarAction.vue",
     "./renderer/ShellPanel.vue": "./src/renderer/ShellPanel.vue",
+    "./renderer/WallpaperStudio.vue": "./src/renderer/WallpaperStudio.vue",
     "./renderer/tip.css": "./src/renderer/tip.css",
     "./renderer/drag.css": "./src/renderer/drag.css",
     "./renderer/window-controls.css": "./src/renderer/window-controls.css",

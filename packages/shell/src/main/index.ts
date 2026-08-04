@@ -8,3 +8,14 @@ export {
   type TRegisterWindowIpcOpts,
 } from './registerWindowIpc.js';
 export { revealPath, openPathWithDefault } from './revealPath.js';
+export {
+  attachWindowStateTracker,
+  captureWindowState,
+  clampWindowStateToDisplays,
+  coerceWindowState,
+  readWindowStateFile,
+  resolveWindowCreateBounds,
+  writeWindowStateFile,
+  type AttachWindowStateOpts,
+  type PersistedWindowState,
+} from './windowState.js';
