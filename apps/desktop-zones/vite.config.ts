@@ -71,6 +71,10 @@ export default defineConfig({
         replacement: path.join(shellPkg, 'src/renderer/TitleBarAction.vue'),
       },
       {
+        find: '@pkg-runner/shell/renderer/WallpaperStudio.vue',
+        replacement: path.join(shellPkg, 'src/renderer/WallpaperStudio.vue'),
+      },
+      {
         find: /^@pkg-runner\/shell\/renderer$/,
         replacement: path.join(shellPkg, 'src/renderer/index.ts'),
       },

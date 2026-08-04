@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "桌面整理器：按类型归类移动 + 打开/重命名/回收站",
+  "description": "自定义桌面：选定目录 + 追踪分组 + 拖放整理",
   "author": "DeyaoCai",
   "main": "dist/main.js",
   "files": [
@@ -17,6 +17,7 @@
     "@pkg-runner/shell": "workspace:*",
     "@pkg-runner/tokens": "workspace:*",
     "@pkg-runner/ui": "workspace:*",
+    "@pkg-runner/wallpaper": "workspace:*",
     "koffi": "^3.1.2",
     "vue": "^3.5.0"
   },
@@ -36,7 +37,7 @@
     "build:dev": "node ./scripts/build-main.mjs --dev",
     "build": "pnpm build:renderer && pnpm build:main",
     "dev:ui": "vite",
-    "dev": "pnpm build:renderer && pnpm build:dev && electron .",
+    "dev": "pnpm build:dev && node ./scripts/dev.mjs",
     "start": "pnpm build && electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit && vue-tsc -p tsconfig.renderer.json --noEmit",
     "clean": "rimraf dist"

@@ -1,23 +1,11 @@
 /**
- * Desktop organize + light file ops (real moves, undo, rename, trash).
+ * Custom-desktop file ops (move into group, undo, rename, trash).
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { shell } from 'electron';
-import {
-  desktopDir,
-  isZoneFolderName,
-  matchZone,
-  zoneFolderName,
-  type ZoneId,
-} from './zones.js';
-
-export type MoveOp = {
-  from: string;
-  to: string;
-  zoneId: ZoneId;
-  name: string;
-};
+import { isUnderAllowedRoots, isUnderRoot, zonesRoot } from './zones.js';
+import { getZonesPrefs, remapTrackedAfterRename, resolveTrackedAbs } from './zonesPrefs.js';
 
 export type UndoBatch = {
   id: string;
@@ -67,7 +55,6 @@ function moveFile(from: string, to: string) {
     fs.renameSync(from, to);
   } catch (e) {
     const code = e && typeof e === 'object' && 'code' in e ? String((e as { code: string }).code) : '';
-    // Cross-device: copy then unlink
     if (code === 'EXDEV') {
       fs.copyFileSync(from, to);
       fs.unlinkSync(from);
@@ -77,99 +64,97 @@ function moveFile(from: string, to: string) {
   }
 }
 
-function assertUnderDesktop(target: string) {
-  const root = path.resolve(desktopDir());
-  const resolved = path.resolve(target);
-  const rel = path.relative(root, resolved);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new Error('路径必须在桌面目录内');
+function pushUndo(done: Array<{ from: string; to: string }>): string | undefined {
+  if (!done.length) return undefined;
+  const undoId = `undo_${Date.now()}`;
+  const batches = readUndoLog();
+  batches.unshift({
+    id: undoId,
+    at: new Date().toISOString(),
+    moves: done,
+  });
+  writeUndoLog(batches);
+  return undoId;
+}
+
+export function assertUnderRoot(target: string, root = zonesRoot()): void {
+  if (root) {
+    if (!isUnderRoot(root, target)) {
+      throw new Error('路径必须在当前桌面根目录内');
+    }
+    return;
+  }
+  if (!isUnderAllowedRoots(target)) {
+    throw new Error('请先选择桌面目录');
   }
 }
 
-/** Preview moves for files currently sitting on Desktop root (not dirs). */
-export function previewOrganize(): {
-  root: string;
-  ops: MoveOp[];
-  error?: string;
-} {
-  const root = desktopDir();
-  if (!fs.existsSync(root)) {
-    return { root, ops: [], error: '桌面目录不存在' };
+function assertUnderWorkspace(target: string): void {
+  if (!isUnderAllowedRoots(target)) {
+    throw new Error('路径必须在自定义桌面或系统桌面内');
   }
+}
 
-  const ops: MoveOp[] = [];
-  let entries: fs.Dirent[];
+export function moveIntoDir(
+  from: string,
+  destDir: string,
+): { ok: boolean; to?: string; error?: string; undoId?: string } {
   try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch (e) {
-    return { root, ops: [], error: e instanceof Error ? e.message : String(e) };
-  }
+    const fromAbs = path.resolve(from);
+    const destAbs = path.resolve(destDir);
+    assertUnderWorkspace(fromAbs);
+    assertUnderWorkspace(destAbs);
 
-  for (const ent of entries) {
-    if (ent.name.startsWith('.')) continue;
-    if (isZoneFolderName(ent.name)) continue;
-    const full = path.join(root, ent.name);
-    let st: fs.Stats;
-    try {
-      st = fs.statSync(full);
-    } catch {
-      continue;
+    if (!fs.existsSync(fromAbs)) {
+      return { ok: false, error: '源不存在' };
     }
-    if (st.isDirectory()) continue; // 目录不自动移动
+    if (!fs.existsSync(destAbs) || !fs.statSync(destAbs).isDirectory()) {
+      return { ok: false, error: '目标目录不存在' };
+    }
 
-    const zoneId = matchZone(path.extname(ent.name), false);
-    const folder = zoneFolderName(zoneId);
-    const destDir = path.join(root, folder);
-    const to = uniqueDest(destDir, ent.name);
-    ops.push({ from: full, to, zoneId, name: ent.name });
+    const fromIsDir = fs.statSync(fromAbs).isDirectory();
+    if (fromIsDir && isUnderRoot(fromAbs, destAbs)) {
+      return { ok: false, error: '不能将目录移入其自身或子目录' };
+    }
+
+    if (path.dirname(fromAbs).toLowerCase() === destAbs.toLowerCase()) {
+      return { ok: true, to: fromAbs };
+    }
+
+    const to = uniqueDest(destAbs, path.basename(fromAbs));
+    // Destination must stay under an allowed root (custom or system desktop).
+    if (!isUnderAllowedRoots(to)) {
+      return { ok: false, error: '目标路径不在允许范围内' };
+    }
+    moveFile(fromAbs, to);
+    const undoId = pushUndo([{ from: fromAbs, to }]);
+    return { ok: true, to, undoId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
-
-  return { root, ops };
 }
 
-export function applyOrganize(ops: MoveOp[]): {
-  ok: boolean;
-  moved: number;
-  failed: Array<{ from: string; error: string }>;
-  undoId?: string;
-} {
-  const failed: Array<{ from: string; error: string }> = [];
-  const done: Array<{ from: string; to: string }> = [];
-
-  for (const op of ops) {
-    try {
-      assertUnderDesktop(op.from);
-      assertUnderDesktop(path.dirname(op.to));
-      if (!fs.existsSync(op.from)) {
-        failed.push({ from: op.from, error: '源文件不存在' });
-        continue;
-      }
-      const to = fs.existsSync(op.to)
-        ? uniqueDest(path.dirname(op.to), path.basename(op.to))
-        : op.to;
-      moveFile(op.from, to);
-      done.push({ from: op.from, to });
-    } catch (e) {
-      failed.push({
-        from: op.from,
-        error: e instanceof Error ? e.message : String(e),
-      });
+export function moveIntoGroup(
+  from: string,
+  groupRel: string,
+): { ok: boolean; to?: string; error?: string; undoId?: string } {
+  try {
+    const prefs = getZonesPrefs();
+    if (!prefs.customRoot) {
+      return { ok: false, error: '请先选择桌面目录' };
     }
-  }
+    const root = path.resolve(prefs.customRoot);
 
-  let undoId: string | undefined;
-  if (done.length) {
-    undoId = `undo_${Date.now()}`;
-    const batches = readUndoLog();
-    batches.unshift({
-      id: undoId,
-      at: new Date().toISOString(),
-      moves: done,
-    });
-    writeUndoLog(batches);
-  }
+    const norm = groupRel.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!prefs.tracked.some((t) => t.toLowerCase() === norm.toLowerCase())) {
+      return { ok: false, error: '目标不是已追踪分组' };
+    }
 
-  return { ok: failed.length === 0, moved: done.length, failed, undoId };
+    const destDir = resolveTrackedAbs(root, norm);
+    return moveIntoDir(from, destDir);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 export function undoLast(): {
@@ -181,13 +166,12 @@ export function undoLast(): {
   const batches = readUndoLog();
   const batch = batches[0];
   if (!batch) {
-    return { ok: false, restored: 0, skipped: [], error: '没有可撤销的整理记录' };
+    return { ok: false, restored: 0, skipped: [], error: '没有可撤销的移动记录' };
   }
 
   const skipped: Array<{ to: string; reason: string }> = [];
   let restored = 0;
 
-  // Reverse order: last moved first
   for (const m of [...batch.moves].reverse()) {
     try {
       if (!fs.existsSync(m.to)) {
@@ -198,8 +182,8 @@ export function undoLast(): {
         skipped.push({ to: m.to, reason: '原位置已有同名文件' });
         continue;
       }
-      assertUnderDesktop(m.to);
-      assertUnderDesktop(path.dirname(m.from));
+      assertUnderWorkspace(m.to);
+      assertUnderWorkspace(path.dirname(m.from));
       moveFile(m.to, m.from);
       restored += 1;
     } catch (e) {
@@ -224,7 +208,7 @@ export function renameItem(
   newName: string,
 ): { ok: boolean; path?: string; error?: string } {
   try {
-    assertUnderDesktop(target);
+    assertUnderWorkspace(target);
     const trimmed = newName.trim();
     if (!trimmed || /[\\/:*?"<>|]/.test(trimmed) || trimmed === '.' || trimmed === '..') {
       return { ok: false, error: '非法文件名' };
@@ -236,6 +220,7 @@ export function renameItem(
     }
     if (fs.existsSync(dest)) return { ok: false, error: '同名已存在' };
     fs.renameSync(target, dest);
+    remapTrackedAfterRename(target, dest);
     return { ok: true, path: dest };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -244,7 +229,7 @@ export function renameItem(
 
 export async function trashItem(target: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    assertUnderDesktop(target);
+    assertUnderWorkspace(target);
     if (!fs.existsSync(target)) return { ok: false, error: '文件不存在' };
     await shell.trashItem(target);
     return { ok: true };
@@ -254,5 +239,7 @@ export async function trashItem(target: string): Promise<{ ok: boolean; error?: 
 }
 
 export function openDesktopFolder(): void {
-  void shell.openPath(desktopDir());
+  const root = zonesRoot();
+  if (!root) return;
+  void shell.openPath(root);
 }
