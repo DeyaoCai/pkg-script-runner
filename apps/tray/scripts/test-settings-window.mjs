@@ -14,6 +14,9 @@ ipcMain.handle('tray:get-settings', () => ({
   screenshotHotkey: 'Alt+E',
   activateHotkey: 'Alt+Q',
   editorHotkey: '',
+  zonesHotkey: '',
+  settingsHotkey: '',
+  historyHotkey: '',
   hotkeysEnabled: true,
   screenshotHistoryLimit: 10,
   fontId: 'jetbrains',
@@ -41,6 +44,9 @@ ipcMain.handle('tray:set-settings', (_e, patch) => ({
     screenshotHotkey: 'Alt+E',
     activateHotkey: 'Alt+Q',
     editorHotkey: '',
+    zonesHotkey: '',
+    settingsHotkey: '',
+    historyHotkey: '',
     hotkeysEnabled: true,
     screenshotHistoryLimit: 10,
     fontId: 'jetbrains',
@@ -59,9 +65,7 @@ ipcMain.handle('tray:set-settings', (_e, patch) => ({
 ipcMain.handle('tray:hotkeys-suspend', () => {});
 ipcMain.handle('tray:hotkeys-resume', () => ({
   ok: true,
-  screenshotError: null,
-  activateError: null,
-  editorError: null,
+  error: null,
 }));
 ipcMain.handle('tray:window-close', () => {});
 ipcMain.handle('tray:open-diag-log', () => '');

@@ -92,4 +92,25 @@ await esbuild.build({
   external: ['electron'],
 });
 
+/** Jimeng page preload + MAIN-world inject (fetch/XHR tap) */
+await esbuild.build({
+  bundle: true,
+  platform: 'node',
+  target: 'node20',
+  sourcemap: false,
+  minify: false,
+  entryPoints: [path.join(zonesRoot, 'src/jimengPagePreload.ts')],
+  outfile: path.join(zonesDistOut, 'jimengPagePreload.cjs'),
+  format: 'cjs',
+  external: ['electron'],
+});
+
+const injectSrc = path.join(zonesRoot, 'assets', 'inject-jimeng.js');
+const injectDst = path.join(zonesDistOut, 'inject-jimeng.js');
+if (fs.existsSync(injectSrc)) {
+  fs.copyFileSync(injectSrc, injectDst);
+} else {
+  console.warn('[tray] missing desktop-zones/assets/inject-jimeng.js');
+}
+
 console.log('[tray] esbuild ok (embedded runnerHost + editorHost + zonesHost)');

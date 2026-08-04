@@ -17,6 +17,7 @@
     "@pkg-runner/assets": "workspace:*",
     "@pkg-runner/shell": "workspace:*",
     "@pkg-runner/tokens": "workspace:*",
+    "@pkg-runner/wallpaper": "workspace:*",
     "koffi": "^3.1.2",
     "node-pty": "^1.1.0"
   },
@@ -30,9 +31,9 @@
   },
   "scripts": {
     "build:ui": "pnpm --filter @pkg-runner/tray-ui build",
-    "build:main": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && node ./scripts/build-main.mjs",
+    "build:main": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && pnpm --filter @pkg-runner/wallpaper build && node ./scripts/build-main.mjs",
     "build": "pnpm build:ui && pnpm build:main",
-    "build:dev": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && node ./scripts/build-main.mjs --dev",
+    "build:dev": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && pnpm --filter @pkg-runner/wallpaper build && node ./scripts/build-main.mjs --dev",
     "dev": "node ./scripts/dev.mjs",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -26,12 +26,14 @@ import {
   normalizeScreenshotDrawColor,
   normalizeHotkey,
   normalizeGlassAlpha,
+  normalizeGlassBlur,
   normalizeShellMosaicCols,
   normalizeShellLayout,
   normalizeTheme,
   normalizeBrandColor,
   brandColorForTone,
   normalizeFontId,
+  normalizeAppBackground,
   trayCmdPath,
   trayCmdReplyPath,
   watchSharedSettings,
@@ -39,6 +41,13 @@ import {
   type SharedPrefs,
   type SharedSettings,
 } from './prefs.js';
+import {
+  listWallpapers,
+  openWallpapersFolder,
+  registerWallpaperProtocol,
+  setDesktopWallpaper,
+  wallpapersDir,
+} from '@pkg-runner/wallpaper';
 import {
   bindScreenshotStarter,
   closeScreenshotSession,
@@ -63,6 +72,7 @@ import {
 } from '../../code-editor/src/main/editorHost.js';
 import {
   applyZonesSettings,
+  registerJimengMediaScheme,
   showZonesWindow,
   shutdownZonesHost,
   startZonesHost,
@@ -77,6 +87,7 @@ import {
   warmRunnerWindow,
 } from '../../runner/src/runnerHost.js';
 import { diagLog, diagLogPath, readDiagTail } from './diagLog.js';
+import { loadUiSession, patchUiSession } from './uiSession.js';
 import {
   ensureAppShortcutsOnPackagedLaunch,
   installAppShortcuts,
@@ -104,6 +115,31 @@ function toggleRunner(): void {
   // 首次开 Runner 再挂 DWM keepalive，避免启动期多一扇窗抢合成
   ensureCompositorKeepalive();
   toggleRunnerWindow();
+}
+
+function toggleBrowserWindow(
+  get: () => BrowserWindow | null,
+  open: () => void,
+): void {
+  const win = get();
+  if (!win || win.isDestroyed()) {
+    open();
+    return;
+  }
+  if (win.isVisible() && !win.isMinimized()) {
+    win.hide();
+  } else {
+    win.show();
+    win.focus();
+  }
+}
+
+function toggleSettings(): void {
+  toggleBrowserWindow(() => settingsWin, openSettingsWindow);
+}
+
+function toggleHistory(): void {
+  toggleBrowserWindow(() => historyWin, openHistoryWindow);
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -197,6 +233,7 @@ if (app.isPackaged) {
 }
 
 registerScreenshotScheme();
+registerJimengMediaScheme();
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -218,9 +255,22 @@ let settingsWin: BrowserWindow | null = null;
 let historyWin: BrowserWindow | null = null;
 let settingsWinDetachMax: (() => void) | null = null;
 let settingsWindowIpcRegistered = false;
-let registeredScreenshotHotkey = '';
-let registeredActivateHotkey = '';
-let registeredEditorHotkey = '';
+type WindowHotkeyId =
+  | 'screenshot'
+  | 'activate'
+  | 'editor'
+  | 'zones'
+  | 'settings'
+  | 'history';
+
+const registeredHotkeys: Record<WindowHotkeyId, string> = {
+  screenshot: '',
+  activate: '',
+  editor: '',
+  zones: '',
+  settings: '',
+  history: '',
+};
 let hotkeysSuspended = false;
 let isQuitting = false;
 let cmdWatcher: fs.FSWatcher | null = null;
@@ -370,6 +420,9 @@ function publishSettings(): void {
     screenshotHotkey: settings.screenshotHotkey,
     activateHotkey: settings.activateHotkey,
     editorHotkey: settings.editorHotkey,
+    zonesHotkey: settings.zonesHotkey,
+    settingsHotkey: settings.settingsHotkey,
+    historyHotkey: settings.historyHotkey,
   });
   applyRunnerSettings(settings);
   applyEditorSettings(settings);
@@ -389,68 +442,78 @@ function unregisterAccel(accel: string) {
   }
 }
 
-function hotkeyConflict(
-  accel: string,
-  self: 'screenshot' | 'activate' | 'editor',
-): string | null {
+const HOTKEY_LABELS: Record<WindowHotkeyId, string> = {
+  screenshot: '截屏',
+  activate: '显示/关闭 Runner',
+  editor: '显示/关闭 编辑器',
+  zones: '显示/关闭 桌面整理',
+  settings: '显示/关闭 设置',
+  history: '显示/关闭 截屏历史',
+};
+
+function hotkeyAccelFor(id: WindowHotkeyId): string {
+  switch (id) {
+    case 'screenshot':
+      return (prefs.screenshotHotkey || '').trim();
+    case 'activate':
+      return (prefs.activateHotkey || '').trim();
+    case 'editor':
+      return (prefs.editorHotkey || '').trim();
+    case 'zones':
+      return (prefs.zonesHotkey || '').trim();
+    case 'settings':
+      return (prefs.settingsHotkey || '').trim();
+    case 'history':
+      return (prefs.historyHotkey || '').trim();
+  }
+}
+
+function hotkeyAction(id: WindowHotkeyId): () => void {
+  switch (id) {
+    case 'screenshot':
+      return () => {
+        void beginScreenshot();
+      };
+    case 'activate':
+      return () => toggleRunner();
+    case 'editor':
+      return () => toggleEditor();
+    case 'zones':
+      return () => toggleZones();
+    case 'settings':
+      return () => toggleSettings();
+    case 'history':
+      return () => toggleHistory();
+  }
+}
+
+function hotkeyConflict(accel: string, self: WindowHotkeyId): string | null {
   if (!accel) return null;
-  const s = (prefs.screenshotHotkey || '').trim();
-  const a = (prefs.activateHotkey || '').trim();
-  const e = (prefs.editorHotkey || '').trim();
-  if (self !== 'screenshot' && accel === s) return '与截屏热键冲突';
-  if (self !== 'activate' && accel === a) return '与显示 Runner 热键冲突';
-  if (self !== 'editor' && accel === e) return '与显示编辑器热键冲突';
+  for (const id of Object.keys(HOTKEY_LABELS) as WindowHotkeyId[]) {
+    if (id === self) continue;
+    if (accel === hotkeyAccelFor(id)) return `与「${HOTKEY_LABELS[id]}」热键冲突`;
+  }
   return null;
 }
 
-function registerScreenshotShortcut() {
-  unregisterAccel(registeredScreenshotHotkey);
-  registeredScreenshotHotkey = '';
-  const next = (prefs.screenshotHotkey || '').trim();
-  if (!next) return { ok: true, error: null as string | null };
-  const conflict = hotkeyConflict(next, 'screenshot');
+function registerOneShortcut(id: WindowHotkeyId): { ok: boolean; error: string | null } {
+  unregisterAccel(registeredHotkeys[id]);
+  registeredHotkeys[id] = '';
+  const next = hotkeyAccelFor(id);
+  if (!next) return { ok: true, error: null };
+  const conflict = hotkeyConflict(next, id);
   if (conflict) return { ok: false, error: conflict };
-  const ok = globalShortcut.register(next, () => {
-    void beginScreenshot();
-  });
+  const ok = globalShortcut.register(next, hotkeyAction(id));
   if (!ok) return { ok: false, error: '热键已被占用或无效' };
-  registeredScreenshotHotkey = next;
-  return { ok: true, error: null as string | null };
-}
-
-function registerActivateShortcut() {
-  unregisterAccel(registeredActivateHotkey);
-  registeredActivateHotkey = '';
-  const next = (prefs.activateHotkey || '').trim();
-  if (!next) return { ok: true, error: null as string | null };
-  const conflict = hotkeyConflict(next, 'activate');
-  if (conflict) return { ok: false, error: conflict };
-  const ok = globalShortcut.register(next, () => toggleRunner());
-  if (!ok) return { ok: false, error: '热键已被占用或无效' };
-  registeredActivateHotkey = next;
-  return { ok: true, error: null as string | null };
-}
-
-function registerEditorShortcut() {
-  unregisterAccel(registeredEditorHotkey);
-  registeredEditorHotkey = '';
-  const next = (prefs.editorHotkey || '').trim();
-  if (!next) return { ok: true, error: null as string | null };
-  const conflict = hotkeyConflict(next, 'editor');
-  if (conflict) return { ok: false, error: conflict };
-  const ok = globalShortcut.register(next, () => toggleEditor());
-  if (!ok) return { ok: false, error: '热键已被占用或无效' };
-  registeredEditorHotkey = next;
-  return { ok: true, error: null as string | null };
+  registeredHotkeys[id] = next;
+  return { ok: true, error: null };
 }
 
 function clearRegisteredShortcuts() {
-  unregisterAccel(registeredScreenshotHotkey);
-  registeredScreenshotHotkey = '';
-  unregisterAccel(registeredActivateHotkey);
-  registeredActivateHotkey = '';
-  unregisterAccel(registeredEditorHotkey);
-  registeredEditorHotkey = '';
+  for (const id of Object.keys(registeredHotkeys) as WindowHotkeyId[]) {
+    unregisterAccel(registeredHotkeys[id]);
+    registeredHotkeys[id] = '';
+  }
   try {
     globalShortcut.unregisterAll();
   } catch {
@@ -461,22 +524,18 @@ function clearRegisteredShortcuts() {
 function registerAllShortcuts() {
   if (hotkeysSuspended || !prefs.hotkeysEnabled) {
     clearRegisteredShortcuts();
-    return {
-      ok: true,
-      screenshotError: null as string | null,
-      activateError: null as string | null,
-      editorError: null as string | null,
-    };
+    return { ok: true, error: null as string | null };
   }
-  const shot = registerScreenshotShortcut();
-  const act = registerActivateShortcut();
-  const ed = registerEditorShortcut();
-  return {
-    ok: shot.ok && act.ok && ed.ok,
-    screenshotError: shot.error,
-    activateError: act.error,
-    editorError: ed.error,
-  };
+  let ok = true;
+  let error: string | null = null;
+  for (const id of Object.keys(HOTKEY_LABELS) as WindowHotkeyId[]) {
+    const res = registerOneShortcut(id);
+    if (!res.ok) {
+      ok = false;
+      error = error || `${HOTKEY_LABELS[id]}：${res.error}`;
+    }
+  }
+  return { ok, error };
 }
 
 function suspendHotkeys() {
@@ -527,9 +586,14 @@ function applySettingsPatch(patch: Partial<SharedSettings>): {
   hotkeyError: string | null;
 } {
   let hotkeyError: string | null = null;
-  const prevShot = prefs.screenshotHotkey;
-  const prevAct = prefs.activateHotkey;
-  const prevEd = prefs.editorHotkey;
+  const prevHotkeys = {
+    screenshotHotkey: prefs.screenshotHotkey,
+    activateHotkey: prefs.activateHotkey,
+    editorHotkey: prefs.editorHotkey,
+    zonesHotkey: prefs.zonesHotkey,
+    settingsHotkey: prefs.settingsHotkey,
+    historyHotkey: prefs.historyHotkey,
+  };
 
   if (typeof patch.screenshotHotkey === 'string') {
     prefs.screenshotHotkey = normalizeHotkey(patch.screenshotHotkey);
@@ -539,6 +603,15 @@ function applySettingsPatch(patch: Partial<SharedSettings>): {
   }
   if (typeof patch.editorHotkey === 'string') {
     prefs.editorHotkey = normalizeHotkey(patch.editorHotkey);
+  }
+  if (typeof patch.zonesHotkey === 'string') {
+    prefs.zonesHotkey = normalizeHotkey(patch.zonesHotkey);
+  }
+  if (typeof patch.settingsHotkey === 'string') {
+    prefs.settingsHotkey = normalizeHotkey(patch.settingsHotkey);
+  }
+  if (typeof patch.historyHotkey === 'string') {
+    prefs.historyHotkey = normalizeHotkey(patch.historyHotkey);
   }
   if (patch.screenshotHistoryLimit != null) {
     const next = normalizeScreenshotHistoryLimit(patch.screenshotHistoryLimit);
@@ -550,6 +623,7 @@ function applySettingsPatch(patch: Partial<SharedSettings>): {
   }
   if (typeof patch.fontId === 'string') prefs.fontId = normalizeFontId(patch.fontId);
   if (patch.glassAlpha != null) prefs.glassAlpha = normalizeGlassAlpha(patch.glassAlpha);
+  if (patch.glassBlur != null) prefs.glassBlur = normalizeGlassBlur(patch.glassBlur);
   const prevTheme = prefs.theme;
   if (patch.theme != null) prefs.theme = normalizeTheme(patch.theme);
   if (patch.brandColor != null) {
@@ -572,17 +646,22 @@ function applySettingsPatch(patch: Partial<SharedSettings>): {
   if (typeof patch.hotkeysEnabled === 'boolean') {
     prefs.hotkeysEnabled = patch.hotkeysEnabled;
   }
+  if ('appBackground' in patch) {
+    prefs.appBackground = normalizeAppBackground(patch.appBackground);
+  }
 
   savePrefs(prefs);
   const res = registerAllShortcuts();
   if (!res.ok) {
-    prefs.screenshotHotkey = prevShot;
-    prefs.activateHotkey = prevAct;
-    prefs.editorHotkey = prevEd;
+    prefs.screenshotHotkey = prevHotkeys.screenshotHotkey;
+    prefs.activateHotkey = prevHotkeys.activateHotkey;
+    prefs.editorHotkey = prevHotkeys.editorHotkey;
+    prefs.zonesHotkey = prevHotkeys.zonesHotkey;
+    prefs.settingsHotkey = prevHotkeys.settingsHotkey;
+    prefs.historyHotkey = prevHotkeys.historyHotkey;
     savePrefs(prefs);
     registerAllShortcuts();
-    hotkeyError =
-      res.screenshotError || res.activateError || res.editorError || '热键注册失败';
+    hotkeyError = res.error || '热键注册失败';
   }
   updateTrayMenu();
   publishSettings();
@@ -983,6 +1062,14 @@ function registerIpc() {
     diagLog('tray', 'ipc.set-settings', { patch });
     return applySettingsPatch(patch && typeof patch === 'object' ? patch : {});
   });
+  ipcMain.handle('tray:list-wallpapers', () => listWallpapers());
+  ipcMain.handle('tray:set-desktop-wallpaper', (_e, filePath: string) =>
+    setDesktopWallpaper(String(filePath)),
+  );
+  ipcMain.handle('tray:open-wallpapers-folder', () => {
+    openWallpapersFolder();
+    return { ok: true as const, dir: wallpapersDir() };
+  });
   ipcMain.handle('tray:diag-log', (_e, event: string, detail?: unknown) => {
     diagLog('settings-ui', event, detail);
   });
@@ -1070,12 +1157,65 @@ if (gotLock) {
           'desktop-zones',
         );
       }
+      if (!process.env.PKG_WALLPAPERS?.trim()) {
+        process.env.PKG_WALLPAPERS = path.join(process.resourcesPath, 'wallpapers');
+      }
+      if (!process.env.PKG_JIMENG_WALLPAPERS?.trim()) {
+        process.env.PKG_JIMENG_WALLPAPERS = path.join(process.resourcesPath, 'jimeng');
+      }
+    } else if (!process.env.PKG_WALLPAPERS?.trim()) {
+      process.env.PKG_WALLPAPERS = path.resolve(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        'packages',
+        'wallpaper',
+        'wallpapers',
+      );
+      if (!process.env.PKG_JIMENG_WALLPAPERS?.trim()) {
+        process.env.PKG_JIMENG_WALLPAPERS = path.resolve(
+          __dirname,
+          '..',
+          '..',
+          '..',
+          'packages',
+          'wallpaper',
+          'jimeng',
+        );
+      }
+    }
+    if (!process.env.PKG_JIMENG_WALLPAPERS?.trim() && process.env.PKG_WALLPAPERS?.trim()) {
+      process.env.PKG_JIMENG_WALLPAPERS = path.join(
+        path.dirname(process.env.PKG_WALLPAPERS),
+        'jimeng',
+      );
     }
     const t0 = Date.now();
     diagLog('tray', 'app.ready', { prefsPath: sharedSettingsPath() });
     prefs = loadPrefs();
+    // migrate zones-local wallpaper pref → shared
+    if (!prefs.appBackground) {
+      try {
+        const legacy = path.join(app.getPath('userData'), 'zones-wallpaper.json');
+        if (fs.existsSync(legacy)) {
+          const raw = JSON.parse(fs.readFileSync(legacy, 'utf8')) as {
+            appBackground?: unknown;
+          };
+          const name = normalizeAppBackground(raw.appBackground);
+          if (name) {
+            prefs.appBackground = name;
+            savePrefs(prefs);
+            diagLog('tray', 'wallpaper.migrate', { name });
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     syncBrandEnvFromPrefs();
     trimScreenshotHistory(prefs.screenshotHistoryLimit);
+    registerWallpaperProtocol();
     registerIpc();
     // 先挂托盘 + 热键，再起宿主，避免等 UI/控制面才「活过来」
     createTray();
@@ -1087,14 +1227,20 @@ if (gotLock) {
     await startRunnerHost({
       mode: 'embedded',
       getSharedSettings: () => settingsFromPrefs(prefs),
+      onVisibilityChange: (visible) => patchUiSession({ runner: visible }),
     });
     await startEditorHost({
       mode: 'embedded',
       getSharedSettings: () => settingsFromPrefs(prefs),
+      onVisibilityChange: (visible) => patchUiSession({ editor: visible }),
     });
     await startZonesHost({
       mode: 'embedded',
       getSharedSettings: () => settingsFromPrefs(prefs),
+      onVisibilityChange: (visible) => patchUiSession({ zones: visible }),
+      patchSharedSettings: (patch) => {
+        applySettingsPatch(patch);
+      },
     });
     // 默认不预热 BrowserWindow：Chromium 冷启动 + Vite 会抢 CPU/磁盘卡主机
     // 需要预热：PKG_RUNNER_WARM=1（错峰单路，不叠三窗）
@@ -1102,6 +1248,17 @@ if (gotLock) {
     watchTrayCmd();
     stopSharedWatch = watchSharedSettings(onSharedSettingsChanged);
     diagLog('tray', 'hosts.ready', { ms: Date.now() - t0 });
+
+    const session = loadUiSession();
+    if (session.runner || session.editor || session.zones) {
+      diagLog('tray', 'ui.session.restore', session);
+      if (session.runner) {
+        ensureCompositorKeepalive();
+        showRunnerWindow();
+      }
+      if (session.editor) showEditorWindow();
+      if (session.zones) showZonesWindow();
+    }
 
     const wantWarm =
       process.env.PKG_RUNNER_WARM === '1' ||

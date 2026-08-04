@@ -1,9 +1,9 @@
 /**
- * Dev: 默认轻量启动（dist-ui，不起 Vite），避免双 Vite + 多窗预热卡主机。
+ * Dev: 默认起 Vite HMR（runner/editor/tray-ui/zones）。
  *
- * HMR（显式）：
- *   pnpm dev -- --hmr
- *   或 PKG_RUNNER_UI_DEV=1
+ * 轻量无 HMR（dist-ui）：
+ *   pnpm dev -- --no-hmr
+ *   或 PKG_RUNNER_UI_DEV=0
  *
  * 可选：PKG_RUNNER_DEV_KILL=1 启动前清旧 electron（会跑 CIM，可能顿一下）
  */
@@ -27,10 +27,12 @@ const ZONES_UI_URL =
   process.env.PKG_ZONES_UI_URL?.trim() || 'http://127.0.0.1:5203';
 
 const argv = process.argv.slice(2);
-const wantHmr =
-  argv.includes('--hmr') ||
-  process.env.PKG_RUNNER_UI_DEV === '1' ||
-  process.env.PKG_RUNNER_UI_DEV === 'true';
+const forceNoHmr =
+  argv.includes('--no-hmr') ||
+  process.env.PKG_RUNNER_UI_DEV === '0' ||
+  process.env.PKG_RUNNER_UI_DEV === 'false';
+/** 默认开 HMR；仅 --no-hmr / PKG_RUNNER_UI_DEV=0 走 dist-ui */
+const wantHmr = !forceNoHmr;
 
 function killStalePkgRunnerElectron() {
   // 默认跳过：Get-CimInstance 扫全机 electron 会明显卡主机
@@ -249,7 +251,7 @@ if (wantHmr) {
   );
 } else {
   console.log(
-    '[dev] light mode — dist-ui, no Vite (use --hmr or PKG_RUNNER_UI_DEV=1 for HMR)',
+    '[dev] light mode — dist-ui, no Vite (default is HMR; this is --no-hmr / PKG_RUNNER_UI_DEV=0)',
   );
   ensureStaticUi();
 }
