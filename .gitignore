@@ -20,6 +20,9 @@ node_modules/
 **/release/
 *.tsbuildinfo
 
+# Jimeng wallpaper downloads (sibling of packages/wallpaper/wallpapers)
+packages/wallpaper/jimeng/
+
 # Accidental tray preload emit
 apps/tray/preload.js
 

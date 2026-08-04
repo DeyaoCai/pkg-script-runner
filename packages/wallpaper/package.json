@@ -1,0 +1,40 @@
+{
+  "name": "@pkg-runner/wallpaper",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "author": "DeyaoCai",
+  "type": "module",
+  "description": "Shared local wallpapers + Electron protocol + Windows desktop wallpaper",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./wallpapers/*": "./wallpapers/*"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "wallpapers"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "electron": ">=35"
+  },
+  "dependencies": {
+    "koffi": "^3.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "electron": "35.7.5",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.5.0"
+  }
+}
