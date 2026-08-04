@@ -29,7 +29,11 @@ async function handleCapture(payload: JimengCapturePayload): Promise<void> {
   }
   // Dynamic import avoids jimengWindow → intercept → favorites → jimengWindow cycle.
   const { applyJimengNetworkCapture } = await import('./jimengFavorites.js');
-  await applyJimengNetworkCapture(url, json);
+  const hint =
+    payload.source === 'home' || payload.source === 'favorite'
+      ? payload.source
+      : null;
+  await applyJimengNetworkCapture(url, json, hint);
 }
 
 export function registerJimengCaptureIpc(): void {

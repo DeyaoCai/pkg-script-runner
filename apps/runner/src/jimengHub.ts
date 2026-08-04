@@ -87,12 +87,8 @@ function mergeItems(
   const map = new Map<string, JimengFavoriteItem>();
   for (const it of prev) map.set(it.id, it);
   for (const it of next) {
-    const old = map.get(it.id);
-    if (old?.source === 'favorite' && it.source === 'home') {
-      map.set(it.id, { ...it, source: 'favorite' });
-    } else {
-      map.set(it.id, it);
-    }
+    // Latest capture wins (do not freeze a wrong 「收藏」 tag over 「推荐」).
+    map.set(it.id, it);
   }
   const fav: JimengFavoriteItem[] = [];
   const rest: JimengFavoriteItem[] = [];

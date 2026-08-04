@@ -64,7 +64,6 @@ import {
   readFavoritesCache,
   setJimengCacheListener,
   syncJimengFavorites,
-  writeFavoritesCache,
   type JimengFavoriteItem,
 } from './jimengFavorites.js';
 import { shutdownJimengSseBridge } from './jimengSseBridge.js';
@@ -664,10 +663,8 @@ export async function startZonesHost(opts: ZonesHostOptions = {}): Promise<void>
   registerWallpaperProtocol();
   registerZonesFileProtocol((abs) => isUnderAllowedRoots(abs));
   registerJimengMediaProtocol();
-  // Persist source repair: assets previously mis-tagged as 「推荐」→「收藏」.
   {
     const cache = readFavoritesCache();
-    writeFavoritesCache(cache.items);
     registerJimengMediaUrls(cache.items);
   }
   registerJimengCaptureIpc();

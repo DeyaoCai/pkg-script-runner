@@ -56,7 +56,7 @@
 
     /**
      * favorite | home | null
-     * Personal assets / favorites → favorite. Only clear community feeds → home.
+     * Recommend before broad favorite tokens (collection_recommend ≠ 收藏).
      */
     function classify(url) {
       if (!url || !hostOk(url)) return null;
@@ -65,12 +65,11 @@
         return null;
       }
       if (/get_favorite_list/i.test(u)) return 'favorite';
-      if (/favorit|collect(?:ion|ed|s)?|bookmark|star_list|like_list|get_collect|my_collect|user_collect|pack_list|asset(?:_list|s)?|get_asset|personal|my_work|my_creation|work_list|library/i.test(u)) {
-        return 'favorite';
-      }
-      // Narrow recommend only — never local_item_list / get_*_list (often 资产).
-      if (/recommend|explore|discover|inspiration|hot[_-]?list|for[_-]?you|trending|home[_-]?feed|gallery_feed|community_feed|get_image_feed|get_video_feed|story_feed|channel_feed/i.test(u)) {
+      if (/recommend|explore|discover|inspiration|hot[_-]?list|for[_-]?you|trending|home[_-]?feed|gallery_feed|community_feed|get_image_feed|get_video_feed|story_feed|channel_feed|local_item_list/i.test(u)) {
         return 'home';
+      }
+      if (/favorit|bookmark|star_list|like_list|get_collect|my_collect|user_collect|pack_list|get_asset_list|personal_asset|my_work|my_creation|work_list/i.test(u)) {
+        return 'favorite';
       }
       return null;
     }

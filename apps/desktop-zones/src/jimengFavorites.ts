@@ -45,20 +45,23 @@ export type JimengDownloadResult = {
   name?: string;
 };
 
-/** Favorites / personal assets / collections (not community recommend). */
+/**
+ * Favorites / personal assets only.
+ * Keep away from broad "collect/collection" — those appear in recommend feeds too.
+ */
 const FAV_URL_ALLOW =
-  /get_favorite_list|favorit|collect(?:ion|ed|s)?|bookmark|star_list|like_list|get_collect|my_collect|user_collect|pack_list|asset(?:_list|s)?|get_asset|personal|my_work|my_creation|work_list|library|用户资产|我的资产|收藏/i;
+  /get_favorite_list|favorit|bookmark|star_list|like_list|get_collect|my_collect|user_collect|pack_list|get_asset_list|personal_asset|my_work|my_creation|work_list|用户资产|我的资产|收藏/i;
 
 /** Never treat as image list for either source. */
 const URL_HARD_DENY =
   /workbench|generate|draft_list|history_list|workspace\/list|upload|login|passport|captcha/i;
 
 /**
- * Community / homepage recommend only — keep narrow.
- * Do NOT use get_.*_list or local_item_list (those are often personal assets).
+ * Community / homepage recommend.
+ * Checked before FAV so …collection_recommend… does not become 「收藏」.
  */
 const HOME_URL_ALLOW =
-  /recommend|explore|discover|inspiration|hot[_-]?list|for[_-]?you|trending|home[_-]?feed|gallery_feed|community_feed|get_image_feed|get_video_feed|story_feed|channel_feed/i;
+  /recommend|explore|discover|inspiration|hot[_-]?list|for[_-]?you|trending|home[_-]?feed|gallery_feed|community_feed|get_image_feed|get_video_feed|story_feed|channel_feed|local_item_list/i;
 
 function cachePath(): string {
   return path.join(app.getPath('userData'), 'jimeng-favorites.json');
@@ -84,14 +87,13 @@ export function readFavoritesCache(): JimengFavoritesCache {
   try {
     const raw = JSON.parse(fs.readFileSync(cachePath(), 'utf8')) as JimengFavoritesCache;
     if (!raw || !Array.isArray(raw.items)) return { updatedAt: '', items: [] };
-    // Repair: personal assets were once mis-tagged as home via broad get_*_list rules.
-    const items = raw.items.map((it) => {
-      if (it && it.source === 'home') {
-        return { ...it, source: 'favorite' as const };
-      }
-      return it;
-    });
-    return { updatedAt: raw.updatedAt || '', items };
+    return {
+      updatedAt: raw.updatedAt || '',
+      items: raw.items.map((it) => ({
+        ...it,
+        source: it?.source === 'home' ? 'home' : 'favorite',
+      })),
+    };
   } catch {
     return { updatedAt: '', items: [] };
   }
@@ -109,8 +111,9 @@ export function writeFavoritesCache(items: JimengFavoriteItem[]): JimengFavorite
 }
 
 export function classifyJimengApiUrl(url: string): JimengItemSource | null {
-  if (isFavoritesApiUrl(url)) return 'favorite';
+  // Recommend first — otherwise broad favorite tokens steal 推荐 feeds.
   if (isHomeFeedApiUrl(url)) return 'home';
+  if (isFavoritesApiUrl(url)) return 'favorite';
   return null;
 }
 
@@ -129,22 +132,35 @@ export function parseJimengItemsFromJson(
 export async function applyJimengNetworkCapture(
   url: string,
   json: unknown,
+  hint?: JimengItemSource | null,
 ): Promise<JimengFavoritesCache | null> {
-  const source = classifyJimengApiUrl(url);
+  // URL wins; inject hint only when URL is ambiguous.
+  const source = classifyJimengApiUrl(url) || hint || null;
   if (!source) return null;
   const incoming = parseJimengItemsFromJson(json, source);
   if (!incoming.length) return null;
 
   const cached = readFavoritesCache().items;
-  const existingFav = cached.filter((x) => (x.source || 'favorite') === 'favorite');
-  const existingHome = cached.filter((x) => x.source === 'home');
-  let items: JimengFavoriteItem[];
-  if (source === 'favorite') {
-    items = mergeBySource(normalizeItems([...existingFav, ...incoming]), existingHome);
-  } else {
-    items = mergeBySource(existingFav, normalizeItems([...existingHome, ...incoming]));
+  // Incoming batch source always wins for those ids (so re-browsing 推荐 can undo a bad tag).
+  const map = new Map<string, JimengFavoriteItem>();
+  for (const it of cached) {
+    if (!it?.id) continue;
+    map.set(it.id, {
+      ...it,
+      source: it.source === 'home' ? 'home' : 'favorite',
+    });
   }
-  return writeFavoritesCache(items);
+  for (const it of incoming) {
+    if (!it.id || !it.downloadUrl) continue;
+    map.set(it.id, { ...it, source });
+  }
+  const fav: JimengFavoriteItem[] = [];
+  const home: JimengFavoriteItem[] = [];
+  for (const it of map.values()) {
+    if (it.source === 'home') home.push(it);
+    else fav.push(it);
+  }
+  return writeFavoritesCache([...fav, ...home]);
 }
 
 /** @deprecated no-op — Jimeng path is local-only now */
@@ -178,45 +194,19 @@ export async function hasJimengSession(): Promise<boolean> {
 function isFavoritesApiUrl(url: string): boolean {
   if (!url || URL_HARD_DENY.test(url)) return false;
   if (/get_favorite_list/i.test(url)) return true;
-  // Favorites only — do not classify generic get_*_list as favorite.
-  if (HOME_URL_ALLOW.test(url) && !FAV_URL_ALLOW.test(url)) return false;
+  if (HOME_URL_ALLOW.test(url)) return false;
   return FAV_URL_ALLOW.test(url);
 }
 
 function isHomeFeedApiUrl(url: string): boolean {
   if (!url || URL_HARD_DENY.test(url)) return false;
-  if (/get_favorite_list/i.test(url) || isFavoritesApiUrl(url)) return false;
+  if (/get_favorite_list/i.test(url)) return false;
   if (!/jimeng\.jianying\.com|jianying\.com/i.test(url)) return false;
   return HOME_URL_ALLOW.test(url);
 }
 
 function tagSource(items: JimengFavoriteItem[], source: JimengItemSource): JimengFavoriteItem[] {
-  // Always stamp capture source (do not keep a wrong prior tag on the object).
   return items.map((it) => ({ ...it, source }));
-}
-
-/** Prefer favorite over home when the same id appears in both. */
-function mergeBySource(
-  favorites: JimengFavoriteItem[],
-  home: JimengFavoriteItem[],
-): JimengFavoriteItem[] {
-  const map = new Map<string, JimengFavoriteItem>();
-  for (const it of tagSource(home, 'home')) {
-    if (!it.id || !it.downloadUrl) continue;
-    map.set(it.id, { ...it, source: 'home' });
-  }
-  for (const it of tagSource(favorites, 'favorite')) {
-    if (!it.id || !it.downloadUrl) continue;
-    map.set(it.id, { ...it, source: 'favorite' });
-  }
-  // Favorites first in UI, then home-only.
-  const fav: JimengFavoriteItem[] = [];
-  const rest: JimengFavoriteItem[] = [];
-  for (const it of map.values()) {
-    if (it.source === 'favorite') fav.push(it);
-    else rest.push(it);
-  }
-  return [...fav, ...rest];
 }
 
 function looksLikeImageUrl(u: string): boolean {
