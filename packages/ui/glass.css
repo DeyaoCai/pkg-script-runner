@@ -1,8 +1,13 @@
-/* Frosted / raised panel surface (opaque panel; no live backdrop-filter) */
+/**
+ * Frosted panel surface — opacity from --panel (--glass-alpha),
+ * blur from --glass-blur. Use on raised chrome / cards / menus.
+ */
 
 .glass-surface {
   background: var(--panel, var(--bg-raised));
   border: 1px solid color-mix(in srgb, var(--border, var(--line)) 75%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 22px));
+  backdrop-filter: blur(var(--glass-blur, 22px));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--neutral-0, #fff) 8%, transparent),
     0 8px 24px color-mix(in srgb, var(--color-shadow, #000) 35%, transparent);

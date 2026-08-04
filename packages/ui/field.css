@@ -27,6 +27,8 @@ label.field {
 }
 
 .field-card {
+  -webkit-backdrop-filter: blur(var(--glass-blur, 22px));
+  backdrop-filter: blur(var(--glass-blur, 22px));
   background: var(--bg-raised, var(--panel));
   border: 1px solid var(--line, var(--border));
   border-radius: 10px;

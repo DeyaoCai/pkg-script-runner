@@ -104,9 +104,17 @@ html[data-env='prod'] {
   --glass-alpha: 0.55;
   --glass-blur: 22px;
 
-  /* ── Semantic: surfaces（跟主色调 / neutral） ── */
-  --color-bg-base: var(--neutral-850);
-  --color-bg-raised: var(--neutral-800);
+  /* ── Semantic: surfaces（全部跟 --glass-alpha，勿再对 --panel 二次 color-mix） ── */
+  --color-bg-base: color-mix(
+    in srgb,
+    var(--neutral-850) calc(var(--glass-alpha) * 100%),
+    var(--transparent)
+  );
+  --color-bg-raised: color-mix(
+    in srgb,
+    var(--neutral-800) calc(var(--glass-alpha) * 100%),
+    var(--transparent)
+  );
   --color-bg-overlay: color-mix(
     in srgb,
     var(--neutral-750) calc(var(--glass-alpha) * 100%),
@@ -263,8 +271,16 @@ html[data-env='test'] {
 html[data-theme='light'] {
   color-scheme: light;
 
-  --color-bg-base: var(--neutral-50);
-  --color-bg-raised: var(--neutral-0);
+  --color-bg-base: color-mix(
+    in srgb,
+    var(--neutral-50) calc(var(--glass-alpha) * 100%),
+    var(--transparent)
+  );
+  --color-bg-raised: color-mix(
+    in srgb,
+    var(--neutral-0) calc(var(--glass-alpha) * 100%),
+    var(--transparent)
+  );
   --color-bg-overlay: color-mix(
     in srgb,
     var(--neutral-50) calc(var(--glass-alpha) * 100%),
@@ -336,4 +352,46 @@ html[data-theme='light'] {
   --color-term-fg: var(--neutral-920);
   --color-term-cursor: var(--brand-550);
   --color-term-selection: var(--brand-150);
+}
+
+/* Shared app window background (tray prefs.appBackground → pkg-wp://).
+ * Surfaces already follow --glass-alpha. Wallpaper uses a fixed light veil so
+ * the panel opacity slider only changes chrome, not a second competing scrim. */
+html[data-app-bg='1'],
+html[data-app-bg='1'] body {
+  background-color: transparent;
+  background-image: linear-gradient(
+      color-mix(in srgb, var(--neutral-850) 42%, var(--transparent)),
+      color-mix(in srgb, var(--neutral-850) 50%, var(--transparent))
+    ),
+    var(--app-bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+html[data-theme='light'][data-app-bg='1'],
+html[data-theme='light'][data-app-bg='1'] body {
+  background-image: linear-gradient(
+      color-mix(in srgb, var(--neutral-50) 42%, var(--transparent)),
+      color-mix(in srgb, var(--neutral-50) 50%, var(--transparent))
+    ),
+    var(--app-bg-image);
+}
+
+html[data-app-bg='1'] #app,
+html[data-app-bg='1'] .app-shell,
+html[data-app-bg='1'] .app {
+  background: transparent;
+}
+
+/**
+ * Unified frosted chrome: fill via --panel/--titlebar (--glass-alpha),
+ * blur via --glass-blur. Apps should prefer these tokens / .glass-surface
+ * instead of one-off backdrop-filter values.
+ */
+:where(.glass-surface, .ui-panel.glass-surface) {
+  -webkit-backdrop-filter: blur(var(--glass-blur, 22px));
+  backdrop-filter: blur(var(--glass-blur, 22px));
 }

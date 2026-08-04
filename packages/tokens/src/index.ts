@@ -23,9 +23,11 @@ export {
 } from './theme.js';
 
 export {
+  applyAppBackground,
   applyFontId,
   applySharedUiSettings,
   bootSharedUi,
+  wallpaperCssUrl,
   type BootSharedUiOptions,
   type SharedUiBridge,
   type SharedUiSettings,

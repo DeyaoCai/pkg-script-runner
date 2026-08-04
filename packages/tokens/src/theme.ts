@@ -12,6 +12,7 @@ export type UiTheme = 'dark' | 'light';
 export type DocumentRoot = StyleRoot & {
   setAttribute: (name: string, value: string) => void;
   getAttribute: (name: string) => string | null;
+  removeAttribute: (name: string) => void;
 };
 
 function docRoot(root?: DocumentRoot): DocumentRoot {

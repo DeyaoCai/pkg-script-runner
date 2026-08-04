@@ -27,7 +27,33 @@ export type SharedUiSettings = {
   glassBlur?: number;
   fontId?: string;
   shellMosaicCols?: number;
+  /** Wallpaper basename → pkg-wp:// URL applied as window background */
+  appBackground?: string | null;
 };
+
+/** Build CSS url() for shared wallpaper protocol (renderer-safe). */
+export function wallpaperCssUrl(name: string | null | undefined): string | null {
+  if (typeof name !== 'string') return null;
+  const base = name.trim().replace(/^.*[/\\]/, '');
+  if (!base || base.includes('..')) return null;
+  if (!/\.(jpg|jpeg|jpe|png|webp|bmp)$/i.test(base)) return null;
+  return `url("pkg-wp://file/${encodeURIComponent(base)}")`;
+}
+
+export function applyAppBackground(
+  name: string | null | undefined,
+  root?: DocumentRoot,
+): void {
+  const r = docRoot(root);
+  const cssUrl = wallpaperCssUrl(name);
+  if (cssUrl) {
+    r.setAttribute('data-app-bg', '1');
+    r.style.setProperty('--app-bg-image', cssUrl);
+  } else {
+    r.setAttribute('data-app-bg', '');
+    r.style.removeProperty('--app-bg-image');
+  }
+}
 
 /** Minimal preload / host bridge for live shared-settings. */
 export type SharedUiBridge = {
@@ -121,6 +147,10 @@ export function applySharedUiSettings(
   if (settings.shellMosaicCols != null) {
     const cols = Math.min(4, Math.max(1, Number(settings.shellMosaicCols) || 2));
     docRoot(root).style.setProperty('--shell-mosaic-cols', String(cols));
+  }
+
+  if ('appBackground' in settings) {
+    applyAppBackground(settings.appBackground, root);
   }
 }
 
