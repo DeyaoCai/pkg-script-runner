@@ -48,6 +48,10 @@ export default defineConfig({
         shellPkg,
         'src/renderer/WindowControls.vue',
       ),
+      '@pkg-runner/shell/renderer/WallpaperStudio.vue': path.join(
+        shellPkg,
+        'src/renderer/WallpaperStudio.vue',
+      ),
       '@pkg-runner/shell/renderer': path.join(
         shellPkg,
         'src/renderer/index.ts',

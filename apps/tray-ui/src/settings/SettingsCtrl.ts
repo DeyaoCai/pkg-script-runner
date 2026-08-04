@@ -8,6 +8,7 @@ import {
   BRAND_PRESET_PROD,
   BRAND_PRESET_TEST,
   applyBrandColor,
+  applyGlass,
   applySharedUiSettings,
   applyTheme,
   normalizeBrandColor,
@@ -23,7 +24,13 @@ const FONTS = [
   { id: 'consolas', label: 'Consolas' },
 ] as const;
 
-type HotkeyKind = 'screenshot' | 'activate' | 'editor';
+type HotkeyKind =
+  | 'screenshot'
+  | 'activate'
+  | 'editor'
+  | 'zones'
+  | 'settings'
+  | 'history';
 
 type SettingsData = TitleBarShellData & {
   settingsSubPath: string;
@@ -33,6 +40,7 @@ type SettingsData = TitleBarShellData & {
   fontId: string;
   brandColor: string;
   glassAlpha: number;
+  glassBlur: number;
   alwaysOnTop: boolean;
   shellMosaicCols: number;
   shellLayout: 'grid' | 'single';
@@ -42,12 +50,17 @@ type SettingsData = TitleBarShellData & {
   pendingShot: string;
   pendingAct: string;
   pendingEditor: string;
+  pendingZones: string;
+  pendingSettings: string;
+  pendingHistory: string;
   recording: HotkeyKind | null;
   statusText: string;
   statusOk: boolean;
   busy: boolean;
   applyLabel: string;
   saveLabel: string;
+  wallpapers: Array<{ name: string; path: string; thumb: string }>;
+  appBackground: string | null;
 };
 
 function formatHotkey(accel: string): string {
@@ -109,7 +122,8 @@ export class SettingsCtrl extends TitleBarShellCtrl<
         theme: 'dark',
         fontId: 'jetbrains',
         brandColor: BRAND_PRESET_PROD,
-        glassAlpha: 100,
+        glassAlpha: 55,
+        glassBlur: 22,
         alwaysOnTop: false,
         shellMosaicCols: 2,
         shellLayout: 'grid',
@@ -119,12 +133,17 @@ export class SettingsCtrl extends TitleBarShellCtrl<
         pendingShot: '',
         pendingAct: '',
         pendingEditor: '',
+        pendingZones: '',
+        pendingSettings: '',
+        pendingHistory: '',
         recording: null,
         statusText: '',
         statusOk: false,
         busy: false,
         applyLabel: '应用',
         saveLabel: '保存',
+        wallpapers: [],
+        appBackground: null,
       },
       props: {},
       state: {},
@@ -143,22 +162,35 @@ export class SettingsCtrl extends TitleBarShellCtrl<
     };
   }
 
-  get shotHotkeyLabel(): string {
-    return this.data.recording === 'screenshot'
-      ? '按下热键…'
-      : formatHotkey(this.data.pendingShot);
+  hotkeyLabel(kind: HotkeyKind): string {
+    if (this.data.recording === kind) return '按下热键…';
+    return formatHotkey(this.pendingFor(kind));
   }
 
-  get actHotkeyLabel(): string {
-    return this.data.recording === 'activate'
-      ? '按下热键…'
-      : formatHotkey(this.data.pendingAct);
+  private pendingFor(kind: HotkeyKind): string {
+    switch (kind) {
+      case 'screenshot':
+        return this.data.pendingShot;
+      case 'activate':
+        return this.data.pendingAct;
+      case 'editor':
+        return this.data.pendingEditor;
+      case 'zones':
+        return this.data.pendingZones;
+      case 'settings':
+        return this.data.pendingSettings;
+      case 'history':
+        return this.data.pendingHistory;
+    }
   }
 
-  get editorHotkeyLabel(): string {
-    return this.data.recording === 'editor'
-      ? '按下热键…'
-      : formatHotkey(this.data.pendingEditor);
+  private setPending(kind: HotkeyKind, accel: string): void {
+    if (kind === 'screenshot') this.setData({ pendingShot: accel });
+    else if (kind === 'activate') this.setData({ pendingAct: accel });
+    else if (kind === 'editor') this.setData({ pendingEditor: accel });
+    else if (kind === 'zones') this.setData({ pendingZones: accel });
+    else if (kind === 'settings') this.setData({ pendingSettings: accel });
+    else this.setData({ pendingHistory: accel });
   }
 
   get brandIsProd(): boolean {
@@ -190,6 +222,14 @@ export class SettingsCtrl extends TitleBarShellCtrl<
     const c = normalizeBrandColor(hex, BRAND_PRESET_PROD);
     applyBrandColor(c);
     this.setData({ brandColor: c });
+  }
+
+  /** Live preview panel opacity + backdrop blur (persisted on Apply/Save). */
+  setGlassUi(alphaPct: number, blurPx: number): void {
+    const a = Math.min(100, Math.max(10, Math.round(Number(alphaPct) || 100)));
+    const b = Math.min(40, Math.max(0, Math.round(Number(blurPx) || 0)));
+    applyGlass(a, b);
+    this.setData({ glassAlpha: a, glassBlur: b });
   }
 
   applyProfile(p: TrayProfileInfo | null | undefined): void {
@@ -231,13 +271,18 @@ export class SettingsCtrl extends TitleBarShellCtrl<
       pendingShot: s.screenshotHotkey || '',
       pendingAct: s.activateHotkey || '',
       pendingEditor: s.editorHotkey || '',
+      pendingZones: s.zonesHotkey || '',
+      pendingSettings: s.settingsHotkey || '',
+      pendingHistory: s.historyHotkey || '',
       historyLimit: s.screenshotHistoryLimit ?? 10,
       fontId: s.fontId || 'jetbrains',
       glassAlpha: s.glassAlpha ?? 100,
+      glassBlur: s.glassBlur ?? 22,
       alwaysOnTop: !!s.alwaysOnTop,
       shellMosaicCols: s.shellMosaicCols ?? 2,
       persistLogs: !!s.persistLogs,
       hotkeysEnabled: s.hotkeysEnabled !== false,
+      appBackground: s.appBackground ?? null,
     });
     applySharedUiSettings(
       { ...s, brandColor: brand },
@@ -254,17 +299,63 @@ export class SettingsCtrl extends TitleBarShellCtrl<
       screenshotHotkey: this.data.pendingShot,
       activateHotkey: this.data.pendingAct,
       editorHotkey: this.data.pendingEditor,
+      zonesHotkey: this.data.pendingZones,
+      settingsHotkey: this.data.pendingSettings,
+      historyHotkey: this.data.pendingHistory,
       screenshotHistoryLimit: Number(this.data.historyLimit),
       fontId: this.data.fontId,
       theme: this.data.theme,
       brandColor: normalizeBrandColor(this.data.brandColor),
       glassAlpha: Number(this.data.glassAlpha),
+      glassBlur: Number(this.data.glassBlur),
       alwaysOnTop: this.data.alwaysOnTop,
       shellMosaicCols: Number(this.data.shellMosaicCols),
       shellLayout: this.data.shellLayout,
       persistLogs: this.data.persistLogs,
       hotkeysEnabled: this.data.hotkeysEnabled,
+      appBackground: this.data.appBackground,
     };
+  }
+
+  async refreshWallpapers(): Promise<void> {
+    const api = getTrayApi();
+    if (!api?.listWallpapers) {
+      this.setData({ wallpapers: [] });
+      return;
+    }
+    try {
+      const wallpapers = await api.listWallpapers();
+      this.setData({ wallpapers: wallpapers || [] });
+    } catch {
+      this.setData({ wallpapers: [] });
+    }
+  }
+
+  async setAppBackground(name: string | null): Promise<void> {
+    this.setData({ appBackground: name, busy: true });
+    try {
+      const ok = await this.persistSettings(name ? '应用背景' : '清除背景');
+      if (ok) this.setStatus(name ? `已设为应用背景：${name}` : '已清除应用背景', true);
+    } finally {
+      this.setData({ busy: false });
+    }
+  }
+
+  async setSystemWallpaper(item: { name: string; path: string }): Promise<void> {
+    const api = getTrayApi();
+    if (!api?.setDesktopWallpaper) return;
+    this.setData({ busy: true });
+    try {
+      const res = await api.setDesktopWallpaper(item.path);
+      if (!res.ok) this.setStatus(`系统壁纸失败: ${res.error || 'unknown'}`, false);
+      else this.setStatus(`已设为系统桌面壁纸：${item.name}`, true);
+    } finally {
+      this.setData({ busy: false });
+    }
+  }
+
+  openWallpapersFolder(): void {
+    void getTrayApi()?.openWallpapersFolder?.();
   }
 
   async load(): Promise<void> {
@@ -298,6 +389,7 @@ export class SettingsCtrl extends TitleBarShellCtrl<
         theme: s?.theme,
       });
       this.applySettings(s);
+      void this.refreshWallpapers();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.setStatus('加载设置失败：' + msg, false);
@@ -338,9 +430,7 @@ export class SettingsCtrl extends TitleBarShellCtrl<
   }
 
   clearHotkey(kind: HotkeyKind): void {
-    if (kind === 'screenshot') this.setData({ pendingShot: '' });
-    else if (kind === 'activate') this.setData({ pendingAct: '' });
-    else this.setData({ pendingEditor: '' });
+    this.setPending(kind, '');
   }
 
   private async handleKeyDown(e: KeyboardEvent): Promise<void> {
@@ -353,9 +443,7 @@ export class SettingsCtrl extends TitleBarShellCtrl<
     }
     const accel = keyToAccel(e);
     if (!accel) return;
-    if (this.data.recording === 'screenshot') this.setData({ pendingShot: accel });
-    else if (this.data.recording === 'activate') this.setData({ pendingAct: accel });
-    else this.setData({ pendingEditor: accel });
+    this.setPending(this.data.recording, accel);
     this.setData({ recording: null });
     await getTrayApi()?.resumeHotkeys?.();
   }
@@ -373,6 +461,9 @@ export class SettingsCtrl extends TitleBarShellCtrl<
         pendingShot: res.settings.screenshotHotkey,
         pendingAct: res.settings.activateHotkey,
         pendingEditor: res.settings.editorHotkey,
+        pendingZones: res.settings.zonesHotkey || '',
+        pendingSettings: res.settings.settingsHotkey || '',
+        pendingHistory: res.settings.historyHotkey || '',
       });
       return false;
     }

@@ -1,9 +1,14 @@
 body {
   margin: 0;
   font: 13px/1.45 var(--sans, system-ui, sans-serif);
-  background: var(--bg);
   color: var(--fg);
   height: 100vh;
+  background: transparent;
+}
+
+html:not([data-app-bg='1']) body,
+html:not([data-app-bg='1']) #app {
+  background: var(--bg);
 }
 
 #app {
@@ -11,4 +16,5 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: transparent;
 }

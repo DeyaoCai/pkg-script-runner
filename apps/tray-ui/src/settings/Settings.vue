@@ -100,10 +100,25 @@
           min="10"
           max="100"
           step="1"
-          v-model.number="ctrl.data.glassAlpha"
+          :value="ctrl.data.glassAlpha"
+          @input="ctrl.setGlassUi(Number(($event.target as HTMLInputElement).value), ctrl.data.glassBlur)"
         />
         <span class="alpha-val">{{ ctrl.data.glassAlpha }}%</span>
       </div>
+      <div class="field-row">
+        <label class="field">背景模糊</label>
+        <input
+          type="range"
+          class="grow"
+          min="0"
+          max="40"
+          step="1"
+          :value="ctrl.data.glassBlur"
+          @input="ctrl.setGlassUi(ctrl.data.glassAlpha, Number(($event.target as HTMLInputElement).value))"
+        />
+        <span class="alpha-val">{{ ctrl.data.glassBlur }}px</span>
+      </div>
+      <p class="field-hint">不透明度与模糊作用于标题栏、面板、卡片等同一套毛玻璃层。</p>
       <label class="field-check">
         <input type="checkbox" v-model="ctrl.data.alwaysOnTop" />
         <span>Runner 始终置顶</span>
@@ -154,6 +169,7 @@
         <input type="checkbox" v-model="ctrl.data.hotkeysEnabled" />
         <span>启用全局热键</span>
       </label>
+      <p class="field-hint">窗口热键为显示/关闭切换；未设置则不绑定。默认均为空。</p>
       <div class="field-row">
         <label class="field">截屏</label>
         <button
@@ -162,36 +178,72 @@
           :class="{ recording: ctrl.data.recording === 'screenshot' }"
           @click="ctrl.startRecord('screenshot')"
         >
-          {{ ctrl.shotHotkeyLabel }}
+          {{ ctrl.hotkeyLabel('screenshot') }}
         </button>
         <button type="button" class="btn" @click="ctrl.clearHotkey('screenshot')">清除</button>
       </div>
       <div class="field-row">
-        <label class="field">显示 Runner</label>
+        <label class="field">Runner</label>
         <button
           type="button"
           class="btn grow"
           :class="{ recording: ctrl.data.recording === 'activate' }"
           @click="ctrl.startRecord('activate')"
         >
-          {{ ctrl.actHotkeyLabel }}
+          {{ ctrl.hotkeyLabel('activate') }}
         </button>
         <button type="button" class="btn" @click="ctrl.clearHotkey('activate')">清除</button>
       </div>
       <div class="field-row">
-        <label class="field">显示编辑器</label>
+        <label class="field">编辑器</label>
         <button
           type="button"
           class="btn grow"
           :class="{ recording: ctrl.data.recording === 'editor' }"
           @click="ctrl.startRecord('editor')"
         >
-          {{ ctrl.editorHotkeyLabel }}
+          {{ ctrl.hotkeyLabel('editor') }}
         </button>
         <button type="button" class="btn" @click="ctrl.clearHotkey('editor')">清除</button>
       </div>
       <div class="field-row">
-        <label class="field">截屏历史</label>
+        <label class="field">桌面整理</label>
+        <button
+          type="button"
+          class="btn grow"
+          :class="{ recording: ctrl.data.recording === 'zones' }"
+          @click="ctrl.startRecord('zones')"
+        >
+          {{ ctrl.hotkeyLabel('zones') }}
+        </button>
+        <button type="button" class="btn" @click="ctrl.clearHotkey('zones')">清除</button>
+      </div>
+      <div class="field-row">
+        <label class="field">设置</label>
+        <button
+          type="button"
+          class="btn grow"
+          :class="{ recording: ctrl.data.recording === 'settings' }"
+          @click="ctrl.startRecord('settings')"
+        >
+          {{ ctrl.hotkeyLabel('settings') }}
+        </button>
+        <button type="button" class="btn" @click="ctrl.clearHotkey('settings')">清除</button>
+      </div>
+      <div class="field-row">
+        <label class="field">截屏历史窗</label>
+        <button
+          type="button"
+          class="btn grow"
+          :class="{ recording: ctrl.data.recording === 'history' }"
+          @click="ctrl.startRecord('history')"
+        >
+          {{ ctrl.hotkeyLabel('history') }}
+        </button>
+        <button type="button" class="btn" @click="ctrl.clearHotkey('history')">清除</button>
+      </div>
+      <div class="field-row">
+        <label class="field">历史条数</label>
         <input
           type="number"
           class="num-sm"
@@ -202,6 +254,54 @@
         <span class="muted">条</span>
       </div>
     </div>
+
+    <div class="field-card">
+      <div class="field-sec">应用背景</div>
+      <div class="field-row wrap">
+        <button type="button" class="btn" @click="ctrl.openWallpapersFolder()">壁纸目录</button>
+        <button
+          type="button"
+          class="btn"
+          :disabled="!ctrl.data.appBackground || ctrl.data.busy"
+          @click="ctrl.setAppBackground(null)"
+        >
+          清除背景
+        </button>
+      </div>
+      <p class="field-hint">
+        全局窗口背景（Runner / 编辑器 / 桌面整理 / 设置）。当前：{{
+          ctrl.data.appBackground || '无'
+        }}
+      </p>
+      <div v-if="ctrl.data.wallpapers.length" class="wp-grid">
+        <button
+          v-for="(wp, i) in ctrl.data.wallpapers"
+          :key="wp.path"
+          type="button"
+          class="wp-card"
+          :class="{ 'is-active': ctrl.data.appBackground === wp.name }"
+          :title="wp.name"
+          @click="openStudio(i)"
+        >
+          <img v-if="wp.thumb" :src="wp.thumb" :alt="wp.name" loading="lazy" />
+          <span class="wp-name">{{ wp.name }}</span>
+          <span class="wp-hint">点击预览</span>
+        </button>
+      </div>
+      <p v-else class="field-hint">壁纸目录为空，可点「壁纸目录」放入图片。</p>
+    </div>
+
+    <WallpaperStudio
+      v-if="studioOpen"
+      v-model="studioIndex"
+      :items="ctrl.data.wallpapers"
+      :active-name="ctrl.data.appBackground"
+      :busy="ctrl.data.busy"
+      @close="studioOpen = false"
+      @apply-app="onStudioApplyApp"
+      @apply-system="onStudioApplySystem"
+      @clear="onStudioClear"
+    />
 
     <p class="status" :class="{ ok: ctrl.data.statusOk }">{{ ctrl.data.statusText }}</p>
   </div>
@@ -234,15 +334,38 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import TitleBarShell from '@pkg-runner/shell/renderer/TitleBarShell.vue';
 import TitleBarMeta from '@pkg-runner/shell/renderer/TitleBarMeta.vue';
+import WallpaperStudio from '@pkg-runner/shell/renderer/WallpaperStudio.vue';
 import { SettingsCtrl } from './SettingsCtrl';
 
 const ctrl = new SettingsCtrl();
+const studioOpen = ref(false);
+const studioIndex = ref(0);
+
+function openStudio(index: number): void {
+  studioIndex.value = index;
+  studioOpen.value = true;
+}
+
+async function onStudioApplyApp(item: { name: string; path: string }): Promise<void> {
+  await ctrl.setAppBackground(item.name);
+}
+
+async function onStudioApplySystem(item: { name: string; path: string }): Promise<void> {
+  await ctrl.setSystemWallpaper(item);
+}
+
+async function onStudioClear(): Promise<void> {
+  await ctrl.setAppBackground(null);
+}
 
 onMounted(() => ctrl.mount());
-onUnmounted(() => ctrl.unmount());
+onUnmounted(() => {
+  studioOpen.value = false;
+  ctrl.unmount();
+});
 </script>
 
 <style lang="less" scoped>
@@ -354,7 +477,9 @@ input[type='range'] {
   gap: 8px;
   padding: 12px 20px 16px;
   border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+  background: var(--bg-raised);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 22px));
+  backdrop-filter: blur(var(--glass-blur, 22px));
   flex-shrink: 0;
 }
 
@@ -367,6 +492,62 @@ input[type='range'] {
   min-width: 40px;
   color: var(--muted);
   text-align: right;
+}
+
+.wp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.wp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 22px));
+  backdrop-filter: blur(var(--glass-blur, 22px));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: zoom-in;
+}
+
+.wp-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.wp-card img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: #111;
+}
+
+.wp-name {
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wp-hint {
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.wp-actions {
+  display: none;
 }
 
 .num-sm {
