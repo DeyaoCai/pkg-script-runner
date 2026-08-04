@@ -66,6 +66,8 @@ export type EditorHostOptions = {
   openDir?: string | null;
   /** Tray injects live shared-settings (theme / brandColor / glass / font). */
   getSharedSettings?: () => unknown;
+  /** Tray session restore: fired when the editor window is shown or soft-hidden. */
+  onVisibilityChange?: (visible: boolean) => void;
 };
 
 const __dirnameHost = path.dirname(fileURLToPath(import.meta.url));
@@ -139,6 +141,8 @@ let unsubWorkspace: (() => void) | null = null;
 let persistingLocal = false;
 let sharedUi: SharedSettings = defaultSharedSettings();
 let getSharedSettingsFn: (() => unknown) | null = null;
+let onVisibilityChangeFn: ((visible: boolean) => void) | null = null;
+let lastEmittedVisible: boolean | null = null;
 
 function colorEnv(): BrandTone {
   return process.env.PKG_RUNNER_COLOR_ENV?.trim().toLowerCase() === 'test'
@@ -308,6 +312,7 @@ function showWindow(): void {
       /* ignore */
     }
   }
+  emitVisibility();
 }
 
 function hideWindow(): void {
@@ -323,6 +328,7 @@ function hideWindow(): void {
     }
   }
   editorDiag('window.hide', { soft: true, mode: hostMode });
+  emitVisibility();
 }
 
 function isEditorVisuallyOpen(): boolean {
@@ -330,6 +336,13 @@ function isEditorVisuallyOpen(): boolean {
   if (softHidden) return false;
   if (mainWindow.isMinimized()) return false;
   return mainWindow.isVisible();
+}
+
+function emitVisibility(): void {
+  const visible = isEditorVisuallyOpen();
+  if (lastEmittedVisible === visible) return;
+  lastEmittedVisible = visible;
+  onVisibilityChangeFn?.(visible);
 }
 
 /** 始终显示（设置页「打开」等，不切换隐藏） */
@@ -427,6 +440,7 @@ function createWindow(): void {
         /* ignore */
       }
       editorDiag('window.warm-hidden', { soft: true, park: true });
+      emitVisibility();
       return;
     }
     showWindow();
@@ -724,6 +738,8 @@ export async function startEditorHost(
   hostMode = opts.mode ?? 'standalone';
   startHidden = !!opts.startHidden;
   getSharedSettingsFn = opts.getSharedSettings ?? null;
+  onVisibilityChangeFn = opts.onVisibilityChange ?? null;
+  lastEmittedVisible = null;
   sharedUi = resolveInitialSharedUi();
 
   prefs = readWorkspacePrefs();

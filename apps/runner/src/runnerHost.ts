@@ -73,10 +73,14 @@ export type RunnerHostOptions = {
   mode?: RunnerHostMode;
   /** Embedded: tray supplies settings synchronously (no tray-cmd / HTTP pull). */
   getSharedSettings?: () => SharedSettings;
+  /** Tray session restore: fired when the runner window is shown or hidden. */
+  onVisibilityChange?: (visible: boolean) => void;
 };
 
 let hostMode: RunnerHostMode = 'standalone';
 let getSharedSettingsFn: (() => SharedSettings) | null = null;
+let onVisibilityChangeFn: ((visible: boolean) => void) | null = null;
+let lastEmittedVisible: boolean | null = null;
 
 const __dirnameHost = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1234,6 +1238,19 @@ function resolveInitialDir(): string | null {
   return resolveDirFromArgv(process.argv);
 }
 
+function isRunnerVisuallyOpen(): boolean {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (mainWindow.isMinimized()) return false;
+  return mainWindow.isVisible();
+}
+
+function emitVisibility(): void {
+  const visible = isRunnerVisuallyOpen();
+  if (lastEmittedVisible === visible) return;
+  lastEmittedVisible = visible;
+  onVisibilityChangeFn?.(visible);
+}
+
 function showWindow() {
   if (!mainWindow) {
     createWindow();
@@ -1242,10 +1259,12 @@ function showWindow() {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+  emitVisibility();
 }
 
 function hideWindow() {
   mainWindow?.hide();
+  emitVisibility();
 }
 
 /** 始终显示（设置页「打开」等，不切换隐藏） */
@@ -1647,6 +1666,7 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     applyPinChrome();
     mainWindow?.show();
+    emitVisibility();
   });
 
   void loadMainWindow(mainWindow);
@@ -1654,6 +1674,10 @@ function createWindow() {
   // 拖动时反复 focus 再 setAlwaysOnTop 会闪，仅 show 时钉一次
   mainWindow.on('show', () => {
     applyPinChrome();
+    emitVisibility();
+  });
+  mainWindow.on('hide', () => {
+    emitVisibility();
   });
   mainWindow.on('maximize', () => {
     send('pkg:maximized', true);
@@ -1798,7 +1822,7 @@ function registerIpc() {
 
   ipcMain.handle('pkg:hotkeys-resume', () => ({
     ok: true,
-    activateError: null as string | null,
+    error: null as string | null,
   }));
 
   ipcMain.handle('pkg:get-persist-logs', () => shared.persistLogs);
@@ -1948,6 +1972,8 @@ export function registerRunnerSecondInstanceHandlers(): void {
 export async function startRunnerHost(opts: RunnerHostOptions = {}): Promise<void> {
   hostMode = opts.mode ?? 'standalone';
   getSharedSettingsFn = opts.getSharedSettings ?? null;
+  onVisibilityChangeFn = opts.onVisibilityChange ?? null;
+  lastEmittedVisible = null;
 
   prefs = loadPrefs();
   migrateLegacyRunnerProjects(prefs);

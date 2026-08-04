@@ -13,6 +13,9 @@
  *   POST /v1/scripts        body: { action, script, dir? }
  *   POST /v1/shell          body: { action, dir?, command?, id? }
  *   POST /v1/ports          body: { action: 'list'|'kill'|'reap', port?, pid?, nodeOnly? }
+ *   POST /v1/jimeng/ingest  body: JimengIngestBody（Zones 上报收藏/推荐）
+ *   GET  /v1/jimeng/stream  SSE（需 Bearer）
+ *   GET  /v1/jimeng/last    最近全量快照
  *
  * 完整说明见 docs/CONTROL-API.md。不用 npm bin、不靠文件 req/ack 轮询。
  */
@@ -22,6 +25,7 @@ import http from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { app } from 'electron';
+import { JimengHub, type JimengIngestBody } from './jimengHub.js';
 import { flushAllDiskLogs, type FlushDiskLogsResult } from './logSink.js';
 import type { PortsActionResult } from './portManager.js';
 
@@ -489,6 +493,30 @@ export async function startControlServer(
         }
         handles.onRunPorts?.(result);
         sendJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/v1/jimeng/ingest') {
+        const raw = await readBody(req, 4 * 1024 * 1024);
+        let parsed: JimengIngestBody;
+        try {
+          parsed = (raw ? JSON.parse(raw) : {}) as JimengIngestBody;
+        } catch {
+          sendJson(res, 400, { ok: false, error: 'invalid json' });
+          return;
+        }
+        const ev = JimengHub.ingest(parsed || {});
+        sendJson(res, 200, { ok: true, seq: ev.seq, kind: ev.kind });
+        return;
+      }
+
+      if (method === 'GET' && pathname === '/v1/jimeng/stream') {
+        JimengHub.subscribe(res);
+        return;
+      }
+
+      if (method === 'GET' && pathname === '/v1/jimeng/last') {
+        sendJson(res, 200, { ok: true, ...JimengHub.getLast() });
         return;
       }
 

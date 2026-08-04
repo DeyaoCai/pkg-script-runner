@@ -34,8 +34,32 @@ Authorization: Bearer <token>
 | POST | `/v1/scripts` | `{ action: "start"\|"restart"\|"stop", script, dir? }` |
 | POST | `/v1/shell` | `{ action: "open"\|"exec"\|"close"\|"list", dir?, command?, id? }` |
 | POST | `/v1/ports` | `{ action: "list"\|"kill"\|"reap", port?, pid?, nodeOnly? }` |
+| POST | `/v1/jimeng/ingest` | Zones 上报即梦收藏/推荐（见下） |
+| GET | `/v1/jimeng/stream` | SSE：连上先推 `snapshot`，其后推 `items_patch` / `status` |
+| GET | `/v1/jimeng/last` | `{ ok, updatedAt, items }` 最近全量 |
 
 配置刷新由托盘 `POST /v1/settings` 推送（Runner 不读盘）。
+
+## `/v1/jimeng/*` 摘要
+
+**POST `/v1/jimeng/ingest`** body：
+
+```json
+{
+  "kind": "items_patch",
+  "mode": "merge",
+  "items": [{ "id", "title", "coverUrl", "downloadUrl", "author?", "source": "favorite"|"home" }],
+  "updatedAt": "ISO",
+  "capturedUrl": "https://jimeng.../get_favorite_list?...",
+  "source": "favorite"
+}
+```
+
+- `kind`: `items_patch` | `snapshot` | `status`
+- `mode`: `merge`（默认，按 id upsert）| `replace`（全量替换；`snapshot` 同效）
+- `status` 可用 `message` / `needLogin` / `error`
+
+**GET `/v1/jimeng/stream`**：`text/event-stream`，每行 `data: {json}`。事件带 `seq` / `serverTs`。
 
 ## `/v1/ports` 行为摘要
 
