@@ -98,6 +98,7 @@ function defaultSettings(): AppSettings {
   return {
     fontId: 'jetbrains',
     glassAlpha: 55,
+    glassBlur: 22,
     theme: 'dark',
     brandTone: 'prod',
     brandColor: BRAND_PRESET_PROD,
@@ -105,7 +106,12 @@ function defaultSettings(): AppSettings {
     shellLayout: 'grid',
     alwaysOnTop: false,
     activateHotkey: '',
+    editorHotkey: '',
+    zonesHotkey: '',
+    settingsHotkey: '',
+    historyHotkey: '',
     screenshotHotkey: '',
+    hotkeysEnabled: true,
     screenshotHistoryLimit: 10,
     persistLogs: false,
   };

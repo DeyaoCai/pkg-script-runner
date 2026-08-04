@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "outDir": "dist/main",
-    "rootDir": "src/main",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2022",
@@ -13,6 +12,11 @@
     "esModuleInterop": true,
     "resolveJsonModule": true
   },
-  "include": ["src/main/**/*.ts"],
+  "include": [
+    "src/main/**/*.ts",
+    "../shared/**/*.ts",
+    "../runner/src/sharedSettings.ts",
+    "../runner/src/pkg.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

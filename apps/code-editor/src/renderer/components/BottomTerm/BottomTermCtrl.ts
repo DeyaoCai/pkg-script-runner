@@ -363,7 +363,7 @@ export class BottomTermCtrl extends Controller<TData, TProps, TState> {
     const term = new Terminal({
       cursorBlink: true,
       fontFamily:
-        readCss('--mono', '') ||
+        readCssVar('--mono', '') ||
         'JetBrains Mono, Consolas, ui-monospace, monospace',
       fontSize: 13,
       theme: termTheme(),
