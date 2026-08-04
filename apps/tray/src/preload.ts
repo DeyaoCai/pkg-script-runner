@@ -5,10 +5,14 @@ export type SharedSettings = {
   screenshotHotkey: string;
   activateHotkey: string;
   editorHotkey: string;
+  zonesHotkey: string;
+  settingsHotkey: string;
+  historyHotkey: string;
   hotkeysEnabled: boolean;
   screenshotHistoryLimit: number;
   fontId: string;
   glassAlpha: number;
+  glassBlur: number;
   theme: 'dark' | 'light';
   brandTone: 'prod' | 'test';
   brandColor: string;
@@ -16,6 +20,7 @@ export type SharedSettings = {
   shellLayout: 'grid' | 'single';
   alwaysOnTop: boolean;
   persistLogs: boolean;
+  appBackground: string | null;
 };
 
 export type TrayProfileInfo = {
@@ -43,12 +48,14 @@ const api = {
     settings: SharedSettings;
     hotkeyError: string | null;
   }> => ipcRenderer.invoke('tray:set-settings', patch),
+  listWallpapers: () => ipcRenderer.invoke('tray:list-wallpapers'),
+  setDesktopWallpaper: (filePath: string) =>
+    ipcRenderer.invoke('tray:set-desktop-wallpaper', filePath),
+  openWallpapersFolder: () => ipcRenderer.invoke('tray:open-wallpapers-folder'),
   suspendHotkeys: (): Promise<void> => ipcRenderer.invoke('tray:hotkeys-suspend'),
   resumeHotkeys: (): Promise<{
     ok: boolean;
-    screenshotError: string | null;
-    activateError: string | null;
-    editorError: string | null;
+    error: string | null;
   }> => ipcRenderer.invoke('tray:hotkeys-resume'),
   startScreenshot: (): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('pkg:ss-start'),

@@ -20,11 +20,18 @@ export {
 export const DEFAULT_SCREENSHOT_HOTKEY = '';
 export const DEFAULT_ACTIVATE_HOTKEY = '';
 export const DEFAULT_EDITOR_HOTKEY = '';
+export const DEFAULT_ZONES_HOTKEY = '';
+export const DEFAULT_SETTINGS_HOTKEY = '';
+export const DEFAULT_HISTORY_HOTKEY = '';
 export const DEFAULT_SCREENSHOT_HISTORY_LIMIT = 10;
 export const MIN_SCREENSHOT_HISTORY_LIMIT = 1;
 export const MAX_SCREENSHOT_HISTORY_LIMIT = 100;
 export const DEFAULT_SCREENSHOT_DRAW_COLOR = BRAND_PRESET_PROD;
-export const DEFAULT_GLASS_ALPHA = 100;
+/** Match tokens.css `--glass-alpha: 0.55` so wallpaper frost is visible by default. */
+export const DEFAULT_GLASS_ALPHA = 55;
+export const DEFAULT_GLASS_BLUR = 22;
+export const MIN_GLASS_BLUR = 0;
+export const MAX_GLASS_BLUR = 40;
 export const DEFAULT_FONT_ID = 'jetbrains';
 export const DEFAULT_THEME = 'dark' as const;
 export const DEFAULT_SHELL_MOSAIC_COLS = 2;
@@ -40,14 +47,24 @@ export type BrandTone = 'prod' | 'test';
 /** Shared across tray / runner / editor (everyone uses). */
 export type SharedPrefs = {
   screenshotHotkey: string;
+  /** Toggle show/hide Runner (empty = unbound). */
   activateHotkey: string;
+  /** Toggle show/hide code editor (empty = unbound). */
   editorHotkey: string;
+  /** Toggle show/hide Desktop Zones (empty = unbound). */
+  zonesHotkey: string;
+  /** Toggle show/hide settings (empty = unbound). */
+  settingsHotkey: string;
+  /** Toggle show/hide screenshot history (empty = unbound). */
+  historyHotkey: string;
   /** Master switch: when false, no global shortcuts are registered. */
   hotkeysEnabled: boolean;
   screenshotHistoryLimit: number;
   screenshotDrawColor: string;
   fontId: string;
   glassAlpha: number;
+  /** Backdrop blur px for frosted panels / titlebar */
+  glassBlur: number;
   theme: UiTheme;
   /** 运行环境色板镜像（icon / data-env）；由 profile 决定，不随拾色器改 */
   brandTone: BrandTone;
@@ -57,20 +74,34 @@ export type SharedPrefs = {
   shellLayout: ShellLayout;
   alwaysOnTop: boolean;
   persistLogs: boolean;
+  /** Basename under shared wallpapers dir; null = no app background */
+  appBackground: string | null;
   migratedFromRunner: boolean;
+  /**
+   * Legacy prefs defaulted glassAlpha to 100 while CSS used 0.55.
+   * After wiring applyGlass, 100 hid wallpaper frost — migrate once to 55.
+   */
+  glassFrostDefaultMigrated: boolean;
 };
 
-export type SharedSettings = Omit<SharedPrefs, 'screenshotDrawColor' | 'migratedFromRunner'>;
+export type SharedSettings = Omit<
+  SharedPrefs,
+  'screenshotDrawColor' | 'migratedFromRunner' | 'glassFrostDefaultMigrated'
+>;
 
 const DEFAULTS: SharedPrefs = {
   screenshotHotkey: DEFAULT_SCREENSHOT_HOTKEY,
   activateHotkey: DEFAULT_ACTIVATE_HOTKEY,
   editorHotkey: DEFAULT_EDITOR_HOTKEY,
+  zonesHotkey: DEFAULT_ZONES_HOTKEY,
+  settingsHotkey: DEFAULT_SETTINGS_HOTKEY,
+  historyHotkey: DEFAULT_HISTORY_HOTKEY,
   hotkeysEnabled: true,
   screenshotHistoryLimit: DEFAULT_SCREENSHOT_HISTORY_LIMIT,
   screenshotDrawColor: DEFAULT_SCREENSHOT_DRAW_COLOR,
   fontId: DEFAULT_FONT_ID,
   glassAlpha: DEFAULT_GLASS_ALPHA,
+  glassBlur: DEFAULT_GLASS_BLUR,
   theme: DEFAULT_THEME,
   brandTone: 'test',
   brandColor: BRAND_PRESET_TEST,
@@ -78,7 +109,9 @@ const DEFAULTS: SharedPrefs = {
   shellLayout: DEFAULT_SHELL_LAYOUT,
   alwaysOnTop: false,
   persistLogs: false,
+  appBackground: null,
   migratedFromRunner: false,
+  glassFrostDefaultMigrated: true,
 };
 
 /** Profile-scoped paths under userData (prod: pkg-runner, dev: pkg-runner-dev). */
@@ -132,6 +165,12 @@ export function normalizeGlassAlpha(raw: unknown): number {
   return Math.min(100, Math.max(10, Math.round(n)));
 }
 
+export function normalizeGlassBlur(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_GLASS_BLUR;
+  return Math.min(MAX_GLASS_BLUR, Math.max(MIN_GLASS_BLUR, Math.round(n)));
+}
+
 export function normalizeShellMosaicCols(raw: unknown): number {
   const n = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(n)) return DEFAULT_SHELL_MOSAIC_COLS;
@@ -156,6 +195,15 @@ export function normalizeFontId(raw: unknown): string {
   return raw.trim();
 }
 
+export function normalizeAppBackground(raw: unknown): string | null {
+  if (raw == null || raw === '') return null;
+  if (typeof raw !== 'string') return null;
+  const name = path.basename(raw.trim());
+  if (!name || name.includes('..')) return null;
+  if (!/\.(jpg|jpeg|jpe|png|webp|bmp)$/i.test(name)) return null;
+  return name;
+}
+
 export function settingsFromPrefs(prefs: SharedPrefs): SharedSettings {
   const tone = pkgRunnerColorEnv();
   prefs.brandTone = tone;
@@ -163,10 +211,14 @@ export function settingsFromPrefs(prefs: SharedPrefs): SharedSettings {
     screenshotHotkey: prefs.screenshotHotkey,
     activateHotkey: prefs.activateHotkey,
     editorHotkey: prefs.editorHotkey,
+    zonesHotkey: prefs.zonesHotkey,
+    settingsHotkey: prefs.settingsHotkey,
+    historyHotkey: prefs.historyHotkey,
     hotkeysEnabled: prefs.hotkeysEnabled,
     screenshotHistoryLimit: prefs.screenshotHistoryLimit,
     fontId: prefs.fontId,
     glassAlpha: prefs.glassAlpha,
+    glassBlur: prefs.glassBlur,
     theme: prefs.theme,
     brandTone: tone,
     brandColor: prefs.brandColor,
@@ -174,6 +226,7 @@ export function settingsFromPrefs(prefs: SharedPrefs): SharedSettings {
     shellLayout: prefs.shellLayout,
     alwaysOnTop: prefs.alwaysOnTop,
     persistLogs: prefs.persistLogs,
+    appBackground: prefs.appBackground,
   };
 }
 
@@ -184,6 +237,11 @@ function coerce(parsed: Record<string, unknown>, migrated: boolean): SharedPrefs
     activateHotkey:
       'activateHotkey' in parsed ? normalizeHotkey(parsed.activateHotkey) : '',
     editorHotkey: 'editorHotkey' in parsed ? normalizeHotkey(parsed.editorHotkey) : '',
+    zonesHotkey: 'zonesHotkey' in parsed ? normalizeHotkey(parsed.zonesHotkey) : '',
+    settingsHotkey:
+      'settingsHotkey' in parsed ? normalizeHotkey(parsed.settingsHotkey) : '',
+    historyHotkey:
+      'historyHotkey' in parsed ? normalizeHotkey(parsed.historyHotkey) : '',
     hotkeysEnabled:
       typeof parsed.hotkeysEnabled === 'boolean' ? parsed.hotkeysEnabled : true,
     screenshotHistoryLimit:
@@ -195,7 +253,18 @@ function coerce(parsed: Record<string, unknown>, migrated: boolean): SharedPrefs
         ? normalizeScreenshotDrawColor(parsed.screenshotDrawColor)
         : DEFAULT_SCREENSHOT_DRAW_COLOR,
     fontId: normalizeFontId(parsed.fontId),
-    glassAlpha: normalizeGlassAlpha(parsed.glassAlpha),
+    glassAlpha: (() => {
+      const frostMigrated = Boolean(parsed.glassFrostDefaultMigrated);
+      const raw =
+        'glassAlpha' in parsed
+          ? normalizeGlassAlpha(parsed.glassAlpha)
+          : DEFAULT_GLASS_ALPHA;
+      // One-shot: opaque legacy default → frosted default (see glassFrostDefaultMigrated).
+      if (!frostMigrated && raw === 100) return DEFAULT_GLASS_ALPHA;
+      return raw;
+    })(),
+    glassBlur:
+      'glassBlur' in parsed ? normalizeGlassBlur(parsed.glassBlur) : DEFAULT_GLASS_BLUR,
     theme: 'theme' in parsed ? normalizeTheme(parsed.theme) : DEFAULT_THEME,
     brandTone: pkgRunnerColorEnv(),
     brandColor: (() => {
@@ -217,7 +286,10 @@ function coerce(parsed: Record<string, unknown>, migrated: boolean): SharedPrefs
       typeof parsed.alwaysOnTop === 'boolean' ? parsed.alwaysOnTop : false,
     persistLogs:
       typeof parsed.persistLogs === 'boolean' ? parsed.persistLogs : false,
+    appBackground:
+      'appBackground' in parsed ? normalizeAppBackground(parsed.appBackground) : null,
     migratedFromRunner: migrated || Boolean(parsed.migratedFromRunner),
+    glassFrostDefaultMigrated: true,
   };
 }
 
@@ -243,11 +315,16 @@ export function loadPrefs(): SharedPrefs {
   const shared = readJson(file);
   if (shared) {
     const prefs = coerce(shared, Boolean(shared.migratedFromRunner));
+    // Persist one-shot frost default migration (100 → 55) and new flag.
+    if (!shared.glassFrostDefaultMigrated) {
+      savePrefs(prefs);
+    }
     diagLog('tray:prefs', 'load.ok', {
       file,
       screenshotHotkey: prefs.screenshotHotkey,
       activateHotkey: prefs.activateHotkey,
       editorHotkey: prefs.editorHotkey,
+      glassAlpha: prefs.glassAlpha,
     });
     return prefs;
   }

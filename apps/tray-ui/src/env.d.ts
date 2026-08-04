@@ -4,10 +4,14 @@ export type SharedSettings = {
   screenshotHotkey: string;
   activateHotkey: string;
   editorHotkey: string;
+  zonesHotkey: string;
+  settingsHotkey: string;
+  historyHotkey: string;
   hotkeysEnabled: boolean;
   screenshotHistoryLimit: number;
   fontId: string;
   glassAlpha: number;
+  glassBlur: number;
   theme: 'dark' | 'light';
   brandTone: 'prod' | 'test';
   brandColor: string;
@@ -15,6 +19,13 @@ export type SharedSettings = {
   shellLayout: 'grid' | 'single';
   alwaysOnTop: boolean;
   persistLogs: boolean;
+  appBackground: string | null;
+};
+
+export type WallpaperItem = {
+  name: string;
+  path: string;
+  thumb: string;
 };
 
 export type TrayProfileInfo = {
@@ -39,12 +50,15 @@ export type TrayApi = {
   setSettings: (
     patch: Partial<SharedSettings>,
   ) => Promise<{ settings: SharedSettings; hotkeyError: string | null }>;
+  listWallpapers: () => Promise<WallpaperItem[]>;
+  setDesktopWallpaper: (
+    filePath: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  openWallpapersFolder: () => Promise<{ ok: boolean; dir?: string }>;
   suspendHotkeys: () => Promise<void>;
   resumeHotkeys: () => Promise<{
     ok: boolean;
-    screenshotError: string | null;
-    activateError: string | null;
-    editorError: string | null;
+    error: string | null;
   }>;
   startScreenshot: () => Promise<{ ok: boolean; error?: string }>;
   listScreenshotHistory: () => Promise<ScreenshotHistoryItem[]>;

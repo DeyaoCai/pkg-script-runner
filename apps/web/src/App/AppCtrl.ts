@@ -97,7 +97,7 @@ function readLocalBlur(): number {
 function defaultSettings(): AppSettings {
   return {
     fontId: 'jetbrains',
-    glassAlpha: 100,
+    glassAlpha: 55,
     theme: 'dark',
     brandTone: 'prod',
     brandColor: BRAND_PRESET_PROD,
@@ -151,7 +151,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
         scriptsWidth: loadWidth('pkg-runner:scripts-w', 200),
         theme: 'dark',
         colorEnv: 'prod',
-        glassAlpha: 100,
+        glassAlpha: 55,
         glassBlur: readLocalBlur(),
         fontId: 'jetbrains',
       },

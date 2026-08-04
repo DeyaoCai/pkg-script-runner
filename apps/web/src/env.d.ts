@@ -79,6 +79,7 @@ export type PortsReapResult = {
 export type AppSettings = {
   fontId: string;
   glassAlpha: number;
+  glassBlur: number;
   theme: 'dark' | 'light';
   brandTone: 'prod' | 'test';
   brandColor: string;
@@ -86,7 +87,12 @@ export type AppSettings = {
   shellLayout: 'grid' | 'single';
   alwaysOnTop: boolean;
   activateHotkey: string;
+  editorHotkey: string;
+  zonesHotkey: string;
+  settingsHotkey: string;
+  historyHotkey: string;
   screenshotHotkey: string;
+  hotkeysEnabled: boolean;
   screenshotHistoryLimit: number;
   persistLogs: boolean;
 };
