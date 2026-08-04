@@ -39,7 +39,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rimraf dist dist-ui release",
     "dist:win": "node ./scripts/dist-bundle.mjs",
-    "dist:win:dir": "electron-builder --win dir --x64",
-    "dist:win:nsis": "electron-builder --win nsis --x64"
+    "dist:win:dir": "node ./scripts/dist-bundle.mjs --dir",
+    "dist:win:nsis": "node ./scripts/dist-bundle.mjs"
   }
 }

@@ -32,8 +32,8 @@
     "check": "pnpm typecheck && pnpm check:vue-controller",
     "clean": "pnpm -r run clean && rimraf node_modules",
     "rebuild:native": "pnpm --filter @pkg-runner/runner rebuild:native",
-    "dist:win": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win",
-    "dist:win:dir": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win:dir"
+    "dist:win": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/desktop-zones build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win",
+    "dist:win:dir": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/desktop-zones build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win:dir"
   },
   "devDependencies": {
     "rimraf": "^6.0.0",

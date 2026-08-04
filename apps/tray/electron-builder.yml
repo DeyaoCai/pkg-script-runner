@@ -1,7 +1,8 @@
 appId: local.pkg-runner.tray
 productName: Pkg Runner
 copyright: Copyright © DeyaoCai
-artifactName: PkgRunner-${version}-${os}-${arch}.${ext}
+# PKG_BUILD_STAMP is set by scripts/dist-bundle.mjs (date + git short sha)
+artifactName: PkgRunner-${version}-${env.PKG_BUILD_STAMP}-${os}-${arch}.${ext}
 directories:
   output: release
   # nsis include (installer.nsh); brand icon from packages/assets
@@ -42,10 +43,6 @@ electronLanguages:
 compression: normal
 npmRebuild: false
 extraResources:
-  - from: release-stage/apps
-    to: apps
-    filter:
-      - '**/*'
   - from: release-stage/runner
     to: runner
     filter:
@@ -58,6 +55,16 @@ extraResources:
     to: desktop-zones
     filter:
       - '**/*'
+  - from: release-stage/wallpapers
+    to: wallpapers
+    filter:
+      - '**/*'
+  - from: release-stage/jimeng
+    to: jimeng
+    filter:
+      - '**/*'
+  - from: release-stage/build-stamp.json
+    to: build-stamp.json
 win:
   target:
     - target: nsis
@@ -78,7 +85,7 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Pkg Runner
   uninstallDisplayName: Pkg Runner
-  artifactName: PkgRunner-Setup-${version}.exe
+  artifactName: PkgRunner-Setup-${version}-${env.PKG_BUILD_STAMP}.exe
   runAfterFinish: true
   deleteAppDataOnUninstall: false
   include: installer.nsh

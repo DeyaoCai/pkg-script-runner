@@ -1,7 +1,11 @@
 /**
- * Build Windows installer (NSIS) + win-unpacked for debugging.
+ * Stage companion UIs + wallpapers, then run electron-builder.
  *
- * Expects prior:
+ * Usage:
+ *   node ./scripts/dist-bundle.mjs           # nsis + dir
+ *   node ./scripts/dist-bundle.mjs --dir     # dir only
+ *
+ * Expects prior builds:
  *   pnpm --filter @pkg-runner/runner build
  *   pnpm --filter @pkg-runner/code-editor build
  *   pnpm --filter @pkg-runner/desktop-zones build
@@ -18,6 +22,13 @@ const repoRoot = path.join(trayRoot, '..', '..');
 const runnerRoot = path.join(repoRoot, 'apps', 'runner');
 const editorRoot = path.join(repoRoot, 'apps', 'code-editor');
 const zonesRoot = path.join(repoRoot, 'apps', 'desktop-zones');
+const wallpaperRoot = path.join(repoRoot, 'packages', 'wallpaper');
+const dirOnly = process.argv.includes('--dir');
+
+function die(msg) {
+  console.error(`[tray-dist] ${msg}`);
+  process.exit(1);
+}
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
@@ -27,6 +38,41 @@ function copyDir(src, dest) {
     if (ent.isDirectory()) copyDir(from, to);
     else fs.copyFileSync(from, to);
   }
+}
+
+function requireDir(label, dir) {
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+    die(`missing ${label}: ${dir}`);
+  }
+  const entries = fs.readdirSync(dir);
+  if (entries.length === 0) die(`empty ${label}: ${dir}`);
+  return dir;
+}
+
+function newestMtime(dir) {
+  let newest = 0;
+  const walk = (d) => {
+    for (const ent of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, ent.name);
+      if (ent.isDirectory()) walk(p);
+      else {
+        const t = fs.statSync(p).mtimeMs;
+        if (t > newest) newest = t;
+      }
+    }
+  };
+  walk(dir);
+  return newest ? new Date(newest).toISOString() : '(none)';
+}
+
+function gitShort() {
+  const r = spawnSync('git', ['rev-parse', '--short', 'HEAD'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    shell: true,
+  });
+  if ((r.status ?? 1) !== 0) return 'nogit';
+  return String(r.stdout || '').trim() || 'nogit';
 }
 
 function desktopDir() {
@@ -42,79 +88,117 @@ function desktopDir() {
   return path.join(home, 'Desktop');
 }
 
+const buildStamp = `${new Date().toISOString().slice(0, 10)}.${gitShort()}`;
+process.env.PKG_BUILD_STAMP = buildStamp;
+
 const stageRoot = path.join(trayRoot, 'release-stage');
 fs.rmSync(stageRoot, { recursive: true, force: true });
+fs.mkdirSync(stageRoot, { recursive: true });
 
-fs.mkdirSync(path.join(stageRoot, 'apps'), { recursive: true });
+const runnerUi = requireDir(
+  'runner dist-ui (pnpm --filter @pkg-runner/runner build)',
+  path.join(runnerRoot, 'dist-ui'),
+);
+const editorRenderer = requireDir(
+  'editor renderer (pnpm --filter @pkg-runner/code-editor build)',
+  path.join(editorRoot, 'dist', 'renderer'),
+);
+const zonesRenderer = requireDir(
+  'desktop-zones renderer (pnpm --filter @pkg-runner/desktop-zones build)',
+  path.join(zonesRoot, 'dist', 'renderer'),
+);
+const wallpapersSrc = requireDir(
+  'bundled wallpapers (packages/wallpaper/wallpapers)',
+  path.join(wallpaperRoot, 'wallpapers'),
+);
 
 const runnerStage = path.join(stageRoot, 'runner');
-const distUi = path.join(runnerRoot, 'dist-ui');
-if (fs.existsSync(distUi)) {
-  copyDir(distUi, path.join(runnerStage, 'dist-ui'));
-  console.log('[tray-dist] staged runner dist-ui');
-} else {
-  console.warn('[tray-dist] runner dist-ui not found — run pnpm --filter @pkg-runner/runner build');
+copyDir(runnerUi, path.join(runnerStage, 'dist-ui'));
+const runnerUiSrc = path.join(runnerRoot, 'ui');
+if (fs.existsSync(runnerUiSrc)) {
+  copyDir(runnerUiSrc, path.join(runnerStage, 'ui'));
 }
-const runnerUi = path.join(runnerRoot, 'ui');
-if (fs.existsSync(runnerUi)) {
-  copyDir(runnerUi, path.join(runnerStage, 'ui'));
-  console.log('[tray-dist] staged runner ui');
-}
-
 const trayRunnerPreload = path.join(trayRoot, 'dist', 'runner', 'preload.cjs');
-if (fs.existsSync(trayRunnerPreload)) {
-  const distStage = path.join(runnerStage, 'dist');
-  fs.mkdirSync(distStage, { recursive: true });
-  fs.copyFileSync(trayRunnerPreload, path.join(distStage, 'preload.cjs'));
-  console.log('[tray-dist] staged runner preload');
+if (!fs.existsSync(trayRunnerPreload)) {
+  die(`missing tray runner preload: ${trayRunnerPreload} (pnpm --filter @pkg-runner/tray build)`);
 }
+fs.mkdirSync(path.join(runnerStage, 'dist'), { recursive: true });
+fs.copyFileSync(trayRunnerPreload, path.join(runnerStage, 'dist', 'preload.cjs'));
 
 const editorStage = path.join(stageRoot, 'code-editor');
-const editorRenderer = path.join(editorRoot, 'dist', 'renderer');
-if (fs.existsSync(editorRenderer)) {
-  copyDir(editorRenderer, path.join(editorStage, 'dist', 'renderer'));
-  console.log('[tray-dist] staged editor renderer');
-} else {
-  console.warn(
-    '[tray-dist] editor renderer not found — run pnpm --filter @pkg-runner/code-editor build',
-  );
-}
+copyDir(editorRenderer, path.join(editorStage, 'dist', 'renderer'));
 const trayEditorPreload = path.join(trayRoot, 'dist', 'editor', 'preload.cjs');
-if (fs.existsSync(trayEditorPreload)) {
-  const distStage = path.join(editorStage, 'dist');
-  fs.mkdirSync(distStage, { recursive: true });
-  fs.copyFileSync(trayEditorPreload, path.join(distStage, 'preload.cjs'));
-  console.log('[tray-dist] staged editor preload fallback');
+if (!fs.existsSync(trayEditorPreload)) {
+  die(`missing tray editor preload: ${trayEditorPreload}`);
 }
+fs.mkdirSync(path.join(editorStage, 'dist'), { recursive: true });
+fs.copyFileSync(trayEditorPreload, path.join(editorStage, 'dist', 'preload.cjs'));
 
 const zonesStage = path.join(stageRoot, 'desktop-zones');
-const zonesRenderer = path.join(zonesRoot, 'dist', 'renderer');
-if (fs.existsSync(zonesRenderer)) {
-  copyDir(zonesRenderer, path.join(zonesStage, 'dist', 'renderer'));
-  console.log('[tray-dist] staged desktop-zones renderer');
-} else {
-  console.warn('[tray-dist] desktop-zones dist/renderer not found — run pnpm --filter @pkg-runner/desktop-zones build');
-}
+copyDir(zonesRenderer, path.join(zonesStage, 'dist', 'renderer'));
 const trayZonesPreload = path.join(trayRoot, 'dist', 'zones', 'preload.cjs');
-if (fs.existsSync(trayZonesPreload)) {
-  const distStage = path.join(zonesStage, 'dist');
-  fs.mkdirSync(distStage, { recursive: true });
-  fs.copyFileSync(trayZonesPreload, path.join(distStage, 'preload.cjs'));
-  console.log('[tray-dist] staged zones preload');
+if (!fs.existsSync(trayZonesPreload)) {
+  die(`missing tray zones preload: ${trayZonesPreload}`);
 }
+fs.mkdirSync(path.join(zonesStage, 'dist'), { recursive: true });
+fs.copyFileSync(trayZonesPreload, path.join(zonesStage, 'dist', 'preload.cjs'));
 
-const build = spawnSync(
-  'pnpm',
-  ['exec', 'electron-builder', '--win', 'nsis', 'dir', '--x64'],
-  {
-    cwd: trayRoot,
-    stdio: 'inherit',
-    shell: true,
-  },
+const wallpapersStage = path.join(stageRoot, 'wallpapers');
+copyDir(wallpapersSrc, wallpapersStage);
+// Packaged jimeng dir starts empty (downloads go here at runtime).
+const jimengStage = path.join(stageRoot, 'jimeng');
+fs.mkdirSync(jimengStage, { recursive: true });
+fs.writeFileSync(
+  path.join(jimengStage, 'README.txt'),
+  'Jimeng wallpaper downloads are stored in this folder.\n',
+  'utf8',
 );
+
+fs.writeFileSync(
+  path.join(stageRoot, 'build-stamp.json'),
+  JSON.stringify(
+    {
+      stamp: buildStamp,
+      builtAt: new Date().toISOString(),
+      git: gitShort(),
+      mtimes: {
+        runnerUi: newestMtime(runnerUi),
+        editorRenderer: newestMtime(editorRenderer),
+        zonesRenderer: newestMtime(zonesRenderer),
+        trayMain: fs.existsSync(path.join(trayRoot, 'dist', 'main.js'))
+          ? new Date(fs.statSync(path.join(trayRoot, 'dist', 'main.js')).mtimeMs).toISOString()
+          : null,
+      },
+    },
+    null,
+    2,
+  ),
+  'utf8',
+);
+
+console.log('[tray-dist] staged:');
+console.log('  runner ui     ', newestMtime(runnerUi));
+console.log('  editor ui     ', newestMtime(editorRenderer));
+console.log('  zones ui      ', newestMtime(zonesRenderer));
+console.log('  wallpapers    ', newestMtime(wallpapersSrc));
+console.log('  build stamp   ', buildStamp);
+
+// Wipe previous electron-builder output so we never ship a half-updated tree.
+const releaseDir = path.join(trayRoot, 'release');
+fs.rmSync(releaseDir, { recursive: true, force: true });
+
+const ebArgs = dirOnly
+  ? ['exec', 'electron-builder', '--win', 'dir', '--x64']
+  : ['exec', 'electron-builder', '--win', 'nsis', 'dir', '--x64'];
+
+const build = spawnSync('pnpm', ebArgs, {
+  cwd: trayRoot,
+  stdio: 'inherit',
+  shell: true,
+  env: { ...process.env, PKG_BUILD_STAMP: buildStamp },
+});
 if ((build.status ?? 1) !== 0) process.exit(build.status ?? 1);
 
-const releaseDir = path.join(trayRoot, 'release');
 const setups = fs.existsSync(releaseDir)
   ? fs
       .readdirSync(releaseDir)
@@ -123,8 +207,8 @@ const setups = fs.existsSync(releaseDir)
 console.log('');
 console.log('[tray-dist] 安装包（推荐发给用户）:');
 for (const n of setups) console.log(' ', path.join(releaseDir, n));
-if (setups.length === 0) {
-  console.log(' ', path.join(releaseDir, 'PkgRunner-Setup-*.exe'));
+if (!dirOnly && setups.length === 0) {
+  console.warn('[tray-dist] 未找到 Setup exe');
 }
 
 const desk = desktopDir();
@@ -147,5 +231,6 @@ if (setups.length > 0) {
 
 console.log('[tray-dist] 调试用解压目录:');
 console.log(' ', path.join(releaseDir, 'win-unpacked', 'PkgRunnerTray.exe'));
+console.log('[tray-dist] build stamp:', buildStamp);
 console.log('');
 process.exit(0);
