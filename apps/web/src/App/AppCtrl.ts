@@ -49,6 +49,11 @@ const LOG_TEXT_MAX = 200_000;
 const LOG_TEXT_KEEP = 150_000;
 
 const GLASS_BLUR_KEY = 'pkg-runner:glass-blur';
+const SCRIPT_SEARCH_KEY = 'pkg-runner:script-search';
+
+function dirKey(dir: string): string {
+  return dir.replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+}
 
 export type AppData = {
   workspaceRoot: string | null;
@@ -56,6 +61,8 @@ export type AppData = {
   projects: ProjectsState['projects'];
   activeProject: string | null;
   project: ProjectPayload | null;
+  /** All workspace package.json payloads keyed by dir (lowercase normalized). */
+  projectsByDir: Record<string, ProjectPayload>;
   jobs: JobInfo[];
   settings: AppSettings;
   logSessions: Record<string, LogSession>;
@@ -151,13 +158,14 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
         projects: [],
         activeProject: null,
         project: null,
+        projectsByDir: {},
         jobs: [],
         settings: defaultSettings(),
         logSessions: {},
         activeLogId: SYSTEM_ID,
         persistLogs: false,
         maximized: false,
-        meta: '选择工作区，再点仓库运行脚本',
+        meta: '选择工作区以加载脚本',
         metaError: false,
         projectSearch: '',
         scriptSearch: '',
@@ -371,6 +379,41 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       .map((x) => x.s);
   }
 
+  /** Flat scripts across workspace for search totals. */
+  get allScriptsFlat(): Array<{
+    dir: string;
+    name: string;
+    command: string;
+    projectName: string;
+  }> {
+    const out: Array<{
+      dir: string;
+      name: string;
+      command: string;
+      projectName: string;
+    }> = [];
+    for (const p of this.data.projects) {
+      const payload = this.projectPayloadForDir(p.dir);
+      if (!payload) continue;
+      for (const s of payload.scripts) {
+        out.push({
+          dir: payload.dir,
+          name: s.name,
+          command: s.command,
+          projectName: payload.name || p.name,
+        });
+      }
+    }
+    return out;
+  }
+
+  projectPayloadForDir(dir: string): ProjectPayload | null {
+    const hit = this.data.projectsByDir[dirKey(dir)];
+    if (hit) return hit;
+    if (this.data.project && sameDir(this.data.project.dir, dir)) return this.data.project;
+    return null;
+  }
+
   get visibleLogs(): LogSession[] {
     const active = this.data.activeProject;
     const list: LogSession[] = [];
@@ -570,18 +613,24 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
 
   private updateMeta(): void {
     const p = this.data.project;
-    if (!p) {
-      // Keep load/select errors set by callers before updateMeta().
+    if (!this.data.workspaceRoot) {
       if (this.data.metaError) return;
       this.setData({
-        meta: this.data.workspaceRoot
-          ? '在标题栏选择项目以加载脚本'
-          : '选择工作区，再点仓库运行脚本',
+        meta: '选择工作区以加载脚本',
         metaError: false,
       });
       return;
     }
-    // Project chips already show name/path — keep meta clear unless flashMeta/errors.
+    if (!this.data.projects.length) {
+      if (this.data.metaError) return;
+      this.setData({
+        meta: '工作区内未发现含 package.json 的仓库',
+        metaError: false,
+      });
+      return;
+    }
+    // Keep meta clear when workspace is ready unless flashMeta/errors.
+    if (this.data.metaError && !p) return;
     this.setData({ meta: '', metaError: false });
   }
 
@@ -602,33 +651,58 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       activeProject: state.activeProject,
     });
     if (!this.api) return;
-    if (state.activeProject) {
-      try {
-        const project = await this.api.loadProject(state.activeProject);
-        this.setData({ project, metaError: false });
-      } catch (e) {
-        this.setData({
-          project: null,
-          meta:
-            e instanceof Error
-              ? e.message
-              : '该仓库没有 package.json，无法加载脚本',
-          metaError: true,
-        });
-      }
-    } else {
-      this.setData({
-        project: null,
-        meta: state.workspaceRoot
-          ? '在左侧选择仓库以加载脚本'
-          : '选择工作区，再点仓库运行脚本',
-        metaError: false,
-      });
+
+    const byDir: Record<string, ProjectPayload> = {};
+    const results = await Promise.all(
+      state.projects.map(async (p) => {
+        try {
+          return await this.api!.loadProject(p.dir);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const payload of results) {
+      if (!payload) continue;
+      byDir[dirKey(payload.dir)] = payload;
     }
+
+    let project: ProjectPayload | null = null;
+    if (state.activeProject) {
+      project = byDir[dirKey(state.activeProject)] || null;
+      if (!project) {
+        try {
+          project = await this.api.loadProject(state.activeProject);
+          byDir[dirKey(project.dir)] = project;
+        } catch (e) {
+          this.setData({
+            projectsByDir: byDir,
+            project: null,
+            meta:
+              e instanceof Error
+                ? e.message
+                : '该仓库没有 package.json，无法加载脚本',
+            metaError: true,
+          });
+          this.updateMeta();
+          this.loadScriptSearch();
+          return;
+        }
+      }
+    }
+
+    this.setData({
+      projectsByDir: byDir,
+      project,
+      metaError: false,
+    });
     this.updateMeta();
+    this.loadScriptSearch();
+  }
+
+  private loadScriptSearch(): void {
     try {
-      const key = `pkg-runner:search:${(state.activeProject || '').toLowerCase()}`;
-      this.setData({ scriptSearch: localStorage.getItem(key) || '' });
+      this.setData({ scriptSearch: localStorage.getItem(SCRIPT_SEARCH_KEY) || '' });
     } catch {
       this.setData({ scriptSearch: '' });
     }
@@ -917,8 +991,21 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   }
 
   async openShell(): Promise<void> {
-    if (!this.api || !this.data.project) return;
-    const info = await this.api.shellOpen(this.data.project.dir, { cols: 80, rows: 24 });
+    if (!this.api) return;
+    let dir = this.data.project?.dir || this.data.activeProject;
+    if (!dir && this.data.projects[0]) dir = this.data.projects[0].dir;
+    if (!dir) {
+      this.flashMeta('请先选择工作区', true);
+      return;
+    }
+    if (!this.data.project || !sameDir(this.data.project.dir, dir)) {
+      try {
+        await this.selectProject(dir);
+      } catch {
+        /* try open anyway */
+      }
+    }
+    const info = await this.api.shellOpen(dir, { cols: 80, rows: 24 });
     this.appendToSession(info.id, '', {
       title: info.title || 'Shell',
       dir: info.dir,
@@ -977,10 +1064,8 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
 
   setScriptSearch(q: string): void {
     this.setData({ scriptSearch: q });
-    const dir = this.data.activeProject;
-    if (!dir) return;
     try {
-      localStorage.setItem(`pkg-runner:search:${dir.toLowerCase()}`, q);
+      localStorage.setItem(SCRIPT_SEARCH_KEY, q);
     } catch {
       /* ignore */
     }

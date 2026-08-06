@@ -227,8 +227,45 @@ input#projectSearchInput:focus {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  margin: 0;
   padding: 4px 6px 2px;
   min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.script-job-group-head:hover {
+  background: color-mix(in srgb, var(--row-hover) 70%, transparent);
+}
+
+.script-job-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.script-job-group-caret {
+  flex-shrink: 0;
+  width: 0.9em;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
 }
 
 .script-job-group-label {
@@ -253,6 +290,11 @@ input#projectSearchInput:focus {
   line-height: 1.4;
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
+}
+
+.script-group-empty {
+  padding: 6px 10px 10px;
+  font-size: var(--fs-12);
 }
 
 .script-job-group-stop {

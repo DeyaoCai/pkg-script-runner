@@ -5,13 +5,11 @@ import {
 } from '@pkg-runner/shell/renderer';
 import type { TWindowBridge } from '@pkg-runner/shell/renderer';
 import type { AppCtrl } from '../../App/AppCtrl';
-import { sameDir } from '../../lib/fuzzy';
 
 type TData = TitleBarShellData;
 type TProps = Record<string, never>;
 type TState = {
   busy: boolean;
-  repoMenuOpen: boolean;
 };
 
 export class TitleBarCtrl extends TitleBarShellCtrl<TData, TProps, TState> {
@@ -23,7 +21,7 @@ export class TitleBarCtrl extends TitleBarShellCtrl<TData, TProps, TState> {
         colorEnv: 'prod',
       }),
       props: {},
-      state: { busy: false, repoMenuOpen: false },
+      state: { busy: false },
     });
   }
 
@@ -54,22 +52,9 @@ export class TitleBarCtrl extends TitleBarShellCtrl<TData, TProps, TState> {
     this.app.setData({ maximized: value });
   }
 
-  isActive(dir: string): boolean {
-    return sameDir(dir, this.app.data.activeProject);
-  }
-
-  toggleRepoMenu(): void {
-    if (!this.app.data.workspaceRoot) return;
-    this.setState({ repoMenuOpen: !this.state.repoMenuOpen });
-  }
-
-  closeRepoMenu(): void {
-    if (this.state.repoMenuOpen) this.setState({ repoMenuOpen: false });
-  }
-
   async onPickWorkspace(): Promise<void> {
     if (this.state.busy) return;
-    this.setState({ busy: true, repoMenuOpen: false });
+    this.setState({ busy: true });
     try {
       await this.app.pickAndAddProject();
     } finally {
@@ -77,17 +62,7 @@ export class TitleBarCtrl extends TitleBarShellCtrl<TData, TProps, TState> {
     }
   }
 
-  async onSelectRepo(dir: string): Promise<void> {
-    this.setState({ repoMenuOpen: false, busy: true });
-    try {
-      await this.app.selectProject(dir);
-    } finally {
-      this.setState({ busy: false });
-    }
-  }
-
   openPorts(): void {
-    this.closeRepoMenu();
     this.app.controllers.ports.open();
   }
 
