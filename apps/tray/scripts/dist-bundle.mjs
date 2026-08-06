@@ -6,6 +6,7 @@
  *   node ./scripts/dist-bundle.mjs --dir     # dir only
  *
  * Expects prior builds:
+ *   pnpm --filter @pkg-runner/wallpaper build
  *   pnpm --filter @pkg-runner/runner build
  *   pnpm --filter @pkg-runner/code-editor build
  *   pnpm --filter @pkg-runner/desktop-zones build

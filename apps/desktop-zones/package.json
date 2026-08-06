@@ -32,9 +32,9 @@
     "vue-tsc": "^2.0.0"
   },
   "scripts": {
-    "build:main": "node ./scripts/build-main.mjs",
+    "build:main": "pnpm --filter @pkg-runner/wallpaper build && node ./scripts/build-main.mjs",
     "build:renderer": "vite build",
-    "build:dev": "node ./scripts/build-main.mjs --dev",
+    "build:dev": "pnpm --filter @pkg-runner/wallpaper build && node ./scripts/build-main.mjs --dev",
     "build": "pnpm build:renderer && pnpm build:main",
     "dev:ui": "vite",
     "dev": "pnpm build:dev && node ./scripts/dev.mjs",

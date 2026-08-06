@@ -74,7 +74,7 @@ async function main() {
     }
   }
 
-  await run('build tray + runner + web', 'pnpm', ['build']);
+  await run('build packages + apps (incl. wallpaper / desktop-zones)', 'pnpm', ['build']);
 
   console.log('');
   console.log(c.green('bootstrap ok'));

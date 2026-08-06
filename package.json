@@ -17,12 +17,14 @@
     "dev:code-editor": "pnpm --filter @pkg-runner/code-editor dev",
     "dev:desktop-zones": "pnpm --filter @pkg-runner/desktop-zones dev",
     "dev:all": "pnpm --filter @pkg-runner/tray dev",
-    "build": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && pnpm --filter @pkg-runner/controller build && pnpm --filter @pkg-runner/shell build && pnpm --filter @pkg-runner/tray-ui build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/web build",
+    "build": "pnpm --filter @pkg-runner/assets build && pnpm --filter @pkg-runner/tokens build && pnpm --filter @pkg-runner/wallpaper build && pnpm --filter @pkg-runner/controller build && pnpm --filter @pkg-runner/shell build && pnpm --filter @pkg-runner/tray-ui build && pnpm --filter @pkg-runner/desktop-zones build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/web build",
     "build:web": "pnpm --filter @pkg-runner/web build",
     "build:tray-ui": "pnpm --filter @pkg-runner/tray-ui build",
     "build:tray": "pnpm --filter @pkg-runner/tray build",
     "build:runner": "pnpm --filter @pkg-runner/runner build",
     "build:code-editor": "pnpm --filter @pkg-runner/code-editor build",
+    "build:wallpaper": "pnpm --filter @pkg-runner/wallpaper build",
+    "build:desktop-zones": "pnpm --filter @pkg-runner/desktop-zones build",
     "start": "pnpm --filter @pkg-runner/tray start",
     "start:runner": "pnpm --filter @pkg-runner/runner start",
     "start:code-editor": "pnpm --filter @pkg-runner/code-editor start",
@@ -32,8 +34,8 @@
     "check": "pnpm typecheck && pnpm check:vue-controller",
     "clean": "pnpm -r run clean && rimraf node_modules",
     "rebuild:native": "pnpm --filter @pkg-runner/runner rebuild:native",
-    "dist:win": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/desktop-zones build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win",
-    "dist:win:dir": "pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/desktop-zones build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win:dir"
+    "dist:win": "pnpm --filter @pkg-runner/wallpaper build && pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/desktop-zones build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win",
+    "dist:win:dir": "pnpm --filter @pkg-runner/wallpaper build && pnpm --filter @pkg-runner/runner build && pnpm --filter @pkg-runner/code-editor build && pnpm --filter @pkg-runner/desktop-zones build && pnpm --filter @pkg-runner/tray build && pnpm --filter @pkg-runner/tray dist:win:dir"
   },
   "devDependencies": {
     "rimraf": "^6.0.0",
