@@ -73,6 +73,10 @@ export class LogPanelCtrl extends Controller<TData, TProps, TState> {
     this.app.setData({
       settings: { ...this.app.data.settings, shellLayout: next },
     });
+    // 网格↔单个：补算当前可见 job 的 HTML
+    for (const s of this.app.visibleLogs) {
+      if (s.kind === 'job' || s.kind === 'system') this.app.ensureLogHtml(s.id);
+    }
     const api = this.app.api;
     if (!api?.requestTraySettingsPatch) {
       this.app.flashMeta('布局已本地切换（托盘未连接，重启后可能复原）', true);
@@ -108,7 +112,7 @@ export class LogPanelCtrl extends Controller<TData, TProps, TState> {
   }
 
   selectTab(id: string): void {
-    this.app.setData({ activeLogId: id });
+    this.app.setActiveLogId(id);
   }
 
   onTabKeydown(e: KeyboardEvent, id: string): void {

@@ -120,8 +120,9 @@
         <div v-if="!s.text" class="empty log-empty-hint">
           双击或 Enter 运行脚本 · 输出会出现在这里
         </div>
+        <!-- 仅激活 tab 跑 ansi→HTML；隐藏 tab 只攒 text，避免吵脚本打满主线程 -->
         <pre
-          v-else
+          v-else-if="app.data.activeLogId === s.id"
           class="log"
           tabindex="0"
           role="textbox"
@@ -191,7 +192,7 @@
           :active="app.data.activeLogId === s.id || ctrl.mosaicMode"
         />
         <pre
-          v-else
+          v-else-if="ctrl.mosaicMode || app.data.activeLogId === s.id"
           class="log"
           tabindex="0"
           role="textbox"
@@ -201,6 +202,7 @@
           @keydown="ctrl.onLogKeydown($event)"
           @mousedown="ctrl.onLogMouseDown($event)"
         />
+        <div v-else-if="!s.text" class="empty log-empty-hint">无输出</div>
       </div>
     </div>
   </section>

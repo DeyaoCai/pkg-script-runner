@@ -46,6 +46,16 @@ import {
   getLogsDir,
   setPersistLogs,
 } from './logSink.js';
+import {
+  SYSTEM_ID as UI_SYSTEM_ID,
+  appendUiSessionText,
+  clearUiSessionText,
+  ensureUiSession,
+  ensureUiSystemSession,
+  listUiSessions,
+  removeUiSession,
+  resetUiStateStore,
+} from './uiStateStore.js';
 import { flushLogsNow, startControlServer } from './controlServer.js';
 import { diagLog, diagLogPath, readDiagTail } from './diagLog.js';
 import { chromeBackground } from '@pkg-runner/tokens';
@@ -308,6 +318,20 @@ function jobsSnapshot(): Array<{ id: string; dir: string; scriptName: string }> 
 function syncJobsUi() {
   const list = jobsSnapshot();
   const stopping = [...stoppingJobs];
+  for (const j of list) {
+    ensureUiSession(j.id, {
+      kind: 'job',
+      title: j.scriptName,
+      scriptName: j.scriptName,
+      dir: j.dir,
+      running: true,
+      stopping: false,
+    });
+  }
+  for (const id of stopping) {
+    ensureUiSession(id, { stopping: true, running: true });
+  }
+  if (!isRunnerUiLive()) return;
   send('pkg:jobs', list);
   send('pkg:stopping', stopping);
   const busy =
@@ -317,18 +341,174 @@ function syncJobsUi() {
   send('pkg:running', busy);
 }
 
+/** UI IPC 合并：吵脚本（Sequelize debug 等）否则每 chunk 打满渲染进程 */
+const LOG_IPC_FLUSH_MS = 64;
+const SHELL_IPC_FLUSH_MS = 32;
+
+type PendingUiLog =
+  | { kind: 'system'; chunk: string }
+  | { kind: 'job'; id: string; scriptName: string; dir: string; chunk: string };
+
+const pendingUiLogs = new Map<string, PendingUiLog>();
+let logIpcFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+const pendingShellData = new Map<string, string>();
+let shellIpcFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 窗可见时才向渲染进程推增量；隐藏时只写主进程 store */
+function isRunnerUiLive(): boolean {
+  return isRunnerVisuallyOpen();
+}
+
+function dropPendingUiIpcWithoutSend(): void {
+  if (logIpcFlushTimer) {
+    clearTimeout(logIpcFlushTimer);
+    logIpcFlushTimer = null;
+  }
+  if (shellIpcFlushTimer) {
+    clearTimeout(shellIpcFlushTimer);
+    shellIpcFlushTimer = null;
+  }
+  pendingUiLogs.clear();
+  pendingShellData.clear();
+}
+
+export type UiStateSnapshot = {
+  sessions: ReturnType<typeof listUiSessions>;
+  jobs: Array<{ id: string; dir: string; scriptName: string }>;
+  stopping: string[];
+};
+
+function buildUiStateSnapshot(): UiStateSnapshot {
+  ensureUiSystemSession();
+  return {
+    sessions: listUiSessions(),
+    jobs: jobsSnapshot(),
+    stopping: [...stoppingJobs],
+  };
+}
+
+function pushUiStateSnapshot(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  dropPendingUiIpcWithoutSend();
+  send('pkg:ui-state', buildUiStateSnapshot());
+}
+
+function flushPendingUiLogs(onlyKey?: string): void {
+  if (!isRunnerUiLive()) {
+    dropPendingUiIpcWithoutSend();
+    return;
+  }
+  if (onlyKey) {
+    const p = pendingUiLogs.get(onlyKey);
+    if (!p) return;
+    pendingUiLogs.delete(onlyKey);
+    if (p.kind === 'system') sendPlain('pkg:log', { kind: 'system', chunk: p.chunk });
+    else sendPlain('pkg:log', { kind: 'job', id: p.id, scriptName: p.scriptName, dir: p.dir, chunk: p.chunk });
+    if (pendingUiLogs.size === 0 && logIpcFlushTimer) {
+      clearTimeout(logIpcFlushTimer);
+      logIpcFlushTimer = null;
+    }
+    return;
+  }
+  if (logIpcFlushTimer) {
+    clearTimeout(logIpcFlushTimer);
+    logIpcFlushTimer = null;
+  }
+  if (pendingUiLogs.size === 0) return;
+  const batch = [...pendingUiLogs.values()];
+  pendingUiLogs.clear();
+  for (const p of batch) {
+    if (p.kind === 'system') sendPlain('pkg:log', { kind: 'system', chunk: p.chunk });
+    else sendPlain('pkg:log', { kind: 'job', id: p.id, scriptName: p.scriptName, dir: p.dir, chunk: p.chunk });
+  }
+}
+
+function scheduleUiLogFlush(): void {
+  if (!isRunnerUiLive()) return;
+  if (logIpcFlushTimer) return;
+  logIpcFlushTimer = setTimeout(() => {
+    logIpcFlushTimer = null;
+    flushPendingUiLogs();
+  }, LOG_IPC_FLUSH_MS);
+}
+
 function appendSystemLog(chunk: string) {
-  sendPlain('pkg:log', { kind: 'system', chunk });
   appendSystemDiskLog(chunk);
+  appendUiSessionText(UI_SYSTEM_ID, chunk, { kind: 'system', title: '系统' });
+  if (!isRunnerUiLive()) return;
+  const key = 'system';
+  const prev = pendingUiLogs.get(key);
+  if (prev?.kind === 'system') prev.chunk += chunk;
+  else pendingUiLogs.set(key, { kind: 'system', chunk });
+  scheduleUiLogFlush();
 }
 
 function appendJobLog(id: string, scriptName: string, dir: string, chunk: string) {
-  sendPlain('pkg:log', { kind: 'job', id, scriptName, dir, chunk });
   appendJobDiskLog(id, scriptName, dir, chunk);
+  appendUiSessionText(id, chunk, {
+    kind: 'job',
+    title: scriptName,
+    scriptName,
+    dir,
+    running: true,
+  });
+  if (!isRunnerUiLive()) return;
+  const prev = pendingUiLogs.get(id);
+  if (prev?.kind === 'job') {
+    prev.chunk += chunk;
+    prev.scriptName = scriptName;
+    prev.dir = dir;
+  } else {
+    pendingUiLogs.set(id, { kind: 'job', id, scriptName, dir, chunk });
+  }
+  scheduleUiLogFlush();
+}
+
+function flushPendingShellData(onlyId?: string): void {
+  if (!isRunnerUiLive()) {
+    if (onlyId) pendingShellData.delete(onlyId);
+    else dropPendingUiIpcWithoutSend();
+    return;
+  }
+  if (onlyId) {
+    const data = pendingShellData.get(onlyId);
+    if (data == null) return;
+    pendingShellData.delete(onlyId);
+    sendPlain('pkg:shell-data', { id: onlyId, data });
+    if (pendingShellData.size === 0 && shellIpcFlushTimer) {
+      clearTimeout(shellIpcFlushTimer);
+      shellIpcFlushTimer = null;
+    }
+    return;
+  }
+  if (shellIpcFlushTimer) {
+    clearTimeout(shellIpcFlushTimer);
+    shellIpcFlushTimer = null;
+  }
+  if (pendingShellData.size === 0) return;
+  const batch = [...pendingShellData.entries()];
+  pendingShellData.clear();
+  for (const [id, data] of batch) {
+    sendPlain('pkg:shell-data', { id, data });
+  }
+}
+
+function scheduleShellDataFlush(): void {
+  if (!isRunnerUiLive()) return;
+  if (shellIpcFlushTimer) return;
+  shellIpcFlushTimer = setTimeout(() => {
+    shellIpcFlushTimer = null;
+    flushPendingShellData();
+  }, SHELL_IPC_FLUSH_MS);
 }
 
 function sendShellData(id: string, data: string) {
-  sendPlain('pkg:shell-data', { id, data });
+  appendUiSessionText(id, data, { kind: 'shell', running: true });
+  if (!isRunnerUiLive()) return;
+  const prev = pendingShellData.get(id);
+  pendingShellData.set(id, prev ? prev + data : data);
+  scheduleShellDataFlush();
 }
 
 /** 正在异步杀掉的 job（已从 jobs 摘掉，禁止立刻同 key 再 start） */
@@ -615,14 +795,25 @@ function openShellSession(
     pty: term,
   };
   shells.set(id, session);
+  ensureUiSession(id, {
+    kind: 'shell',
+    title,
+    dir: projectDir,
+    cwd: projectDir,
+    running: true,
+  });
 
   term.onData((data) => {
     sendShellData(id, data);
   });
   term.onExit(({ exitCode }) => {
     if (shells.get(id)?.pty === term) session.pty = null;
+    ensureUiSession(id, { running: false, code: exitCode ?? null });
     sendShellData(id, `\r\n[终端已退出 ${exitCode ?? '?'}]\r\n`);
-    send('pkg:exit', { id: session.id, scriptName: session.title, code: exitCode ?? null });
+    flushPendingShellData(id);
+    if (isRunnerUiLive()) {
+      send('pkg:exit', { id: session.id, scriptName: session.title, code: exitCode ?? null });
+    }
     syncJobsUi();
   });
 
@@ -662,7 +853,11 @@ function stopShellCommand(id: string): boolean {
   const session = shells.get(id);
   if (!session?.pty) return false;
   killShellPty(session);
-  send('pkg:exit', { id: session.id, scriptName: session.title, code: null });
+  ensureUiSession(id, { running: false, code: null });
+  flushPendingShellData(id);
+  if (isRunnerUiLive()) {
+    send('pkg:exit', { id: session.id, scriptName: session.title, code: null });
+  }
   syncJobsUi();
   return true;
 }
@@ -671,7 +866,11 @@ function stopAllShellCommands() {
   for (const session of shells.values()) {
     if (!session.pty) continue;
     killShellPty(session);
-    send('pkg:exit', { id: session.id, scriptName: session.title, code: null });
+    ensureUiSession(session.id, { running: false, code: null });
+    flushPendingShellData(session.id);
+    if (isRunnerUiLive()) {
+      send('pkg:exit', { id: session.id, scriptName: session.title, code: null });
+    }
   }
   syncJobsUi();
 }
@@ -699,6 +898,7 @@ function closeShellSession(id: string): boolean {
   if (!session) return false;
   killShellPty(session);
   shells.delete(id);
+  removeUiSession(id);
   syncJobsUi();
   return true;
 }
@@ -792,15 +992,18 @@ function startJob(dir: string, scriptName: string): string {
       jobs.delete(id);
       current.processJob?.close();
       appendJobLog(id, scriptName, project.dir, `\n[启动失败] ${err.message}\n`);
+      ensureUiSession(id, { running: false, stopping: false, code: null });
+      flushPendingUiLogs(id);
       closeJobDiskLog(id);
       syncJobsUi();
-      send('pkg:exit', { id, scriptName, code: null });
+      if (isRunnerUiLive()) send('pkg:exit', { id, scriptName, code: null });
       return;
     }
     processJob?.close();
     if (current && current.proc !== proc) return;
+    flushPendingUiLogs(id);
     syncJobsUi();
-    send('pkg:exit', { id, scriptName, code: null });
+    if (isRunnerUiLive()) send('pkg:exit', { id, scriptName, code: null });
   });
   proc.on('close', (code) => {
     const current = jobs.get(id);
@@ -808,16 +1011,20 @@ function startJob(dir: string, scriptName: string): string {
       jobs.delete(id);
       current.processJob?.close();
       appendJobLog(id, scriptName, project.dir, `\n[退出码 ${code ?? '?'}]\n`);
+      ensureUiSession(id, { running: false, stopping: false, code: code ?? null });
+      flushPendingUiLogs(id);
       closeJobDiskLog(id);
       syncJobsUi();
-      send('pkg:exit', { id, scriptName, code });
+      if (isRunnerUiLive()) send('pkg:exit', { id, scriptName, code });
       return;
     }
     // stop 路径已 terminate+close；若仍持有未关句柄则补关
     if (!current) processJob?.close();
     if (current && current.proc !== proc) return;
+    ensureUiSession(id, { running: false, stopping: false, code: code ?? null });
+    flushPendingUiLogs(id);
     syncJobsUi();
-    send('pkg:exit', { id, scriptName, code });
+    if (isRunnerUiLive()) send('pkg:exit', { id, scriptName, code });
   });
 
   return id;
@@ -1197,8 +1404,12 @@ function broadcastUiSnapshot(): void {
   send('pkg:settings', shared);
   send('pkg:maximized', mainWindow?.isMaximized() ?? false);
   send('pkg:projects', projectsState());
-  send('pkg:jobs', jobsSnapshot());
-  send('pkg:running', jobs.size > 0);
+  if (isRunnerUiLive()) {
+    pushUiStateSnapshot();
+  } else {
+    send('pkg:jobs', jobsSnapshot());
+    send('pkg:running', jobs.size > 0);
+  }
 }
 
 function scheduleUiSnapshotBroadcast(): void {
@@ -1247,7 +1458,19 @@ function isRunnerVisuallyOpen(): boolean {
 function emitVisibility(): void {
   const visible = isRunnerVisuallyOpen();
   if (lastEmittedVisible === visible) return;
+  const wasVisible = lastEmittedVisible;
   lastEmittedVisible = visible;
+  if (visible && !wasVisible) {
+    // 亮窗：丢弃未发增量（已在 store），推全量快照，再恢复增量
+    pushUiStateSnapshot();
+    // jobs/running 等也补一发（快照已含 jobs；兼容旧渲染）
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      send('pkg:jobs', jobsSnapshot());
+      send('pkg:stopping', [...stoppingJobs]);
+    }
+  } else if (!visible && wasVisible) {
+    dropPendingUiIpcWithoutSend();
+  }
   onVisibilityChangeFn?.(visible);
 }
 
@@ -1863,6 +2086,19 @@ function registerIpc() {
   });
 
   ipcMain.handle('pkg:get-jobs', () => jobsSnapshot());
+  ipcMain.handle('pkg:get-ui-state', () => buildUiStateSnapshot());
+  ipcMain.handle('pkg:clear-log-session', (_e, id: string) => {
+    const key = String(id || '');
+    if (!key) return false;
+    clearUiSessionText(key);
+    return true;
+  });
+  ipcMain.handle('pkg:remove-log-session', (_e, id: string) => {
+    const key = String(id || '');
+    if (!key || key === UI_SYSTEM_ID) return false;
+    removeUiSession(key);
+    return true;
+  });
 
   ipcMain.handle('pkg:stop', async (_e, jobId?: string) => {
     if (jobId) {
@@ -1974,6 +2210,7 @@ export async function startRunnerHost(opts: RunnerHostOptions = {}): Promise<voi
   getSharedSettingsFn = opts.getSharedSettings ?? null;
   onVisibilityChangeFn = opts.onVisibilityChange ?? null;
   lastEmittedVisible = null;
+  resetUiStateStore();
 
   prefs = loadPrefs();
   migrateLegacyRunnerProjects(prefs);
@@ -2115,6 +2352,8 @@ export function shutdownRunnerHost(): void {
   stopAllAssociatedProcesses('退出前停止');
   flushAllDiskLogs();
   closeAllDiskLogs();
+  dropPendingUiIpcWithoutSend();
+  resetUiStateStore();
   if (mainWindow && !mainWindow.isDestroyed()) {
     try {
       mainWindow.destroy();

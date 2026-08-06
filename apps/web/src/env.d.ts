@@ -25,6 +25,25 @@ export type LogPayload =
 
 export type JobInfo = { id: string; dir: string; scriptName: string };
 
+export type UiSessionSnap = {
+  id: string;
+  kind: 'system' | 'job' | 'shell';
+  title: string;
+  dir: string | null;
+  scriptName?: string;
+  text: string;
+  running: boolean;
+  stopping: boolean;
+  code: number | null;
+  cwd?: string;
+};
+
+export type UiStateSnapshot = {
+  sessions: UiSessionSnap[];
+  jobs: JobInfo[];
+  stopping: string[];
+};
+
 export type PortOwner = 'self' | 'job' | 'shell' | 'unmanaged';
 
 export type ClassifiedPort = {
@@ -121,6 +140,9 @@ export type PkgRunnerApi = {
   shellClose: (id: string) => Promise<boolean>;
   shellCwd: (id: string) => Promise<{ cwd: string; title: string; dir: string } | null>;
   getJobs: () => Promise<JobInfo[]>;
+  getUiState: () => Promise<UiStateSnapshot>;
+  clearLogSession: (id: string) => Promise<boolean>;
+  removeLogSession: (id: string) => Promise<boolean>;
   getSettings: () => Promise<AppSettings>;
   openTraySettings: () => Promise<void>;
   requestTraySettingsPatch: (patch: Partial<AppSettings>) => Promise<void>;
@@ -146,6 +168,7 @@ export type PkgRunnerApi = {
   windowDragEnd?: () => void;
   onMaximized: (cb: (maximized: boolean) => void) => () => void;
   onLog: (cb: (payload: LogPayload) => void) => () => void;
+  onUiState: (cb: (state: UiStateSnapshot) => void) => () => void;
   onRunning: (cb: (running: boolean) => void) => () => void;
   onJobs: (cb: (jobs: JobInfo[]) => void) => () => void;
   onStopping: (cb: (ids: string[]) => void) => () => void;

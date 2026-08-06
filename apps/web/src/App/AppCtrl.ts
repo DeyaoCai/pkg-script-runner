@@ -17,6 +17,7 @@ import type {
   ProjectsState,
   PkgRunnerApi,
   PkgRunnerColorEnv,
+  UiStateSnapshot,
 } from '../env';
 import { ansiToHtml } from '../lib/ansi';
 import { filterBestScore, fuzzyBestScore, sameDir } from '../lib/fuzzy';
@@ -42,6 +43,10 @@ export type LogSession = {
 };
 
 export const SYSTEM_ID = 'system';
+
+/** 输出面板内存上限（降到约 200KB，避免 ansi→HTML 打满主线程） */
+const LOG_TEXT_MAX = 200_000;
+const LOG_TEXT_KEEP = 150_000;
 
 const GLASS_BLUR_KEY = 'pkg-runner:glass-blur';
 
@@ -127,6 +132,9 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   private readonly shellPendingData = new Map<string, string>();
   /** 主机正在杀树的 job id（jobs 已摘掉、exit 未到） */
   private stoppingIds = new Set<string>();
+  /** 待刷 ansi→html 的 session；每帧最多算一次可见面板 */
+  private readonly logHtmlDirty = new Set<string>();
+  private logHtmlRaf: number | null = null;
 
   declare controllers: {
     scripts: ScriptsPanelCtrl;
@@ -183,6 +191,9 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     const unsubs = [
       api.onLog((p) => {
         this.handleLogPayload(p);
+      }),
+      api.onUiState((state) => {
+        this.applyUiStateSnapshot(state);
       }),
       api.onJobs((list) => {
         void this.setData({ jobs: list });
@@ -263,9 +274,78 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     }
     try {
       await this.applyProjectsState(await api.getProjects());
-      this.setData({ jobs: await api.getJobs() });
     } catch {
       /* ignore */
+    }
+    try {
+      if (typeof api.getUiState === 'function') {
+        this.applyUiStateSnapshot(await api.getUiState());
+      } else {
+        this.setData({ jobs: await api.getJobs() });
+      }
+    } catch {
+      try {
+        this.setData({ jobs: await api.getJobs() });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /** 主进程全量投影：替换 logSessions / jobs / stopping */
+  applyUiStateSnapshot(state: UiStateSnapshot): void {
+    const next: Record<string, LogSession> = {};
+    for (const s of state.sessions || []) {
+      next[s.id] = {
+        id: s.id,
+        kind: s.kind,
+        title: s.title,
+        dir: s.dir,
+        scriptName: s.scriptName,
+        text: s.text || '',
+        html: null,
+        running: !!s.running,
+        stopping: !!s.stopping,
+        code: s.code,
+        cwd: s.cwd,
+      };
+      if (s.kind === 'shell' && s.text) {
+        this.shellPendingData.set(s.id, s.text);
+        window.dispatchEvent(
+          new CustomEvent('pkg:shell-reset', { detail: { id: s.id, data: s.text } }),
+        );
+      }
+    }
+    if (!next[SYSTEM_ID]) {
+      next[SYSTEM_ID] = {
+        id: SYSTEM_ID,
+        kind: 'system',
+        title: '系统',
+        dir: null,
+        text: '',
+        html: null,
+        running: false,
+        stopping: false,
+        code: null,
+      };
+    }
+    this.stoppingIds = new Set(state.stopping || []);
+    this.setData({
+      logSessions: next,
+      jobs: state.jobs || [],
+    });
+    this.reconcileJobSessionFlags();
+    const active = this.data.activeLogId;
+    if (!next[active]) {
+      this.setActiveLogId(this.visibleLogs[0]?.id || SYSTEM_ID);
+    } else {
+      this.ensureLogHtml(active);
+    }
+    // 网格下补算可见 job HTML
+    if (this.controllers.log.mosaicMode) {
+      for (const s of Object.values(next)) {
+        if (s.kind === 'job' || s.kind === 'system') this.ensureLogHtml(s.id);
+      }
     }
   }
 
@@ -317,6 +397,11 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   unmount(): void {
     window.removeEventListener('blur', this.onWindowBlurClearResize);
     document.body.classList.remove('is-resizing-projects', 'is-resizing-scripts');
+    if (this.logHtmlRaf != null) {
+      cancelAnimationFrame(this.logHtmlRaf);
+      this.logHtmlRaf = null;
+    }
+    this.logHtmlDirty.clear();
     this.cleanupBoot?.();
     this.cleanupBoot = undefined;
     this.controllers.titleBar.dispose();
@@ -383,6 +468,42 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     return s.html;
   }
 
+  /** 切输出 tab：补算 HTML（后台 tab 可能 html=null） */
+  setActiveLogId(id: string): void {
+    this.setData({ activeLogId: id });
+    this.ensureLogHtml(id);
+  }
+
+  /** 当前是否需要为该 session 跑 ansi→HTML（隐藏 tab 只攒 text） */
+  isLogHtmlLive(s: LogSession): boolean {
+    if (s.kind === 'shell') return false;
+    const log = this.controllers.log;
+    if (log.mosaicMode) return s.kind === 'job' || s.kind === 'system';
+    return s.id === this.data.activeLogId;
+  }
+
+  /** 切 tab / 布局后补算一次可见输出 */
+  ensureLogHtml(id: string): void {
+    const s = this.data.logSessions[id];
+    if (!s || s.kind === 'shell') return;
+    if (s.html == null && s.text) s.html = ansiToHtml(s.text);
+  }
+
+  private scheduleLogHtmlFlush(): void {
+    if (this.logHtmlRaf != null) return;
+    this.logHtmlRaf = requestAnimationFrame(() => {
+      this.logHtmlRaf = null;
+      const ids = [...this.logHtmlDirty];
+      this.logHtmlDirty.clear();
+      for (const id of ids) {
+        const s = this.data.logSessions[id];
+        if (!s || s.kind === 'shell') continue;
+        if (this.isLogHtmlLive(s)) s.html = ansiToHtml(s.text);
+        else s.html = null;
+      }
+    });
+  }
+
   findJob(dir: string, scriptName: string): JobInfo | undefined {
     return this.data.jobs.find((j) => sameDir(j.dir, dir) && j.scriptName === scriptName);
   }
@@ -416,15 +537,19 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       };
       this.data.logSessions[id] = s;
     }
-    s.text += chunk;
-    if (s.text.length > 800_000) s.text = s.text.slice(-600_000);
-    s.html = null;
+    if (chunk) s.text += chunk;
+    if (s.text.length > LOG_TEXT_MAX) s.text = s.text.slice(-LOG_TEXT_KEEP);
     if (meta?.title) s.title = meta.title;
     if (meta?.dir !== undefined) s.dir = meta.dir;
     if (meta?.scriptName) s.scriptName = meta.scriptName;
     if (meta?.running != null) s.running = meta.running;
     if (meta?.stopping != null) s.stopping = meta.stopping;
     if (meta?.cwd) s.cwd = meta.cwd;
+    if (s.kind === 'shell') return;
+    if (chunk) {
+      this.logHtmlDirty.add(id);
+      this.scheduleLogHtmlFlush();
+    }
   }
 
   private handleLogPayload(payload: LogPayload): void {
@@ -439,7 +564,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       running: true,
     });
     if (!this.data.activeLogId || this.data.activeLogId === SYSTEM_ID) {
-      this.setData({ activeLogId: payload.id });
+      this.setActiveLogId(payload.id);
     }
   }
 
@@ -584,7 +709,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       cwd: payload.cwd,
       running: true,
     });
-    void this.setData({ activeLogId: payload.id });
+    void this.setActiveLogId(payload.id);
     const pending = this.shellPendingData.get(payload.id);
     if (pending) {
       window.dispatchEvent(
@@ -622,7 +747,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
         running: true,
       });
     }
-    void this.setData({ activeLogId: id });
+    void this.setActiveLogId(id);
   }
 
   async pickAndAddProject(): Promise<void> {
@@ -651,7 +776,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     // 停止中禁止立刻再 start（与主机 stoppingJobs 对齐）
     if (this.isScriptStopping(dir, scriptName)) return;
     const id = await this.api.runScript(dir, scriptName);
-    this.setData({ activeLogId: id });
+    this.setActiveLogId(id);
     this.appendToSession(id, '', {
       title: scriptName,
       scriptName,
@@ -690,7 +815,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       s.stopping = false;
       s.code = null;
       const newId = await this.api.runScript(dir, scriptName);
-      this.setData({ activeLogId: newId });
+      this.setActiveLogId(newId);
       this.appendToSession(newId, '', {
         title: scriptName,
         scriptName,
@@ -714,7 +839,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
       cwd: info.cwd,
       running: true,
     });
-    this.setData({ activeLogId: info.id });
+    this.setActiveLogId(info.id);
     const pending = this.shellPendingData.get(info.id);
     if (pending) {
       window.dispatchEvent(
@@ -730,18 +855,29 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     if (!s) return;
     if (s.kind === 'shell' && this.api) await this.api.shellClose(id);
     else if (s.running && this.api) await this.api.stop(id);
+    if (this.api && typeof this.api.removeLogSession === 'function') {
+      try {
+        await this.api.removeLogSession(id);
+      } catch {
+        /* ignore */
+      }
+    }
     delete this.data.logSessions[id];
     if (this.data.activeLogId === id) {
-      this.setData({ activeLogId: this.visibleLogs[0]?.id || SYSTEM_ID });
+      this.setActiveLogId(this.visibleLogs[0]?.id || SYSTEM_ID);
     }
   }
 
   clearActiveLog(): void {
-    const s = this.data.logSessions[this.data.activeLogId];
+    const id = this.data.activeLogId;
+    const s = this.data.logSessions[id];
     if (!s) return;
     s.text = '';
     s.html = '';
     s.code = null;
+    if (this.api && typeof this.api.clearLogSession === 'function') {
+      void this.api.clearLogSession(id);
+    }
   }
 
   setProjectSearch(q: string): void {

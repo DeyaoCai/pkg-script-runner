@@ -31,6 +31,13 @@ export class TerminalViewCtrl extends Controller<TData, TProps, TState> {
     this.term.write(detail.data);
   };
 
+  private onShellReset = (e: Event) => {
+    const detail = (e as CustomEvent<{ id: string; data: string }>).detail;
+    if (!detail || detail.id !== this.props.sessionId || !this.term) return;
+    this.term.reset();
+    if (detail.data) this.term.write(detail.data);
+  };
+
   fitAndResize(): void {
     if (!this.term || !this.fit || !this.props.active) return;
     try {
@@ -142,6 +149,7 @@ export class TerminalViewCtrl extends Controller<TData, TProps, TState> {
     });
     host.addEventListener('copy', this.onCopyEvent);
     window.addEventListener('pkg:shell-data', this.onShellData);
+    window.addEventListener('pkg:shell-reset', this.onShellReset);
     this.ro = new ResizeObserver(() => this.fitAndResize());
     this.ro.observe(host);
     requestAnimationFrame(() => this.fitAndResize());
@@ -160,6 +168,7 @@ export class TerminalViewCtrl extends Controller<TData, TProps, TState> {
 
   unmount(): void {
     window.removeEventListener('pkg:shell-data', this.onShellData);
+    window.removeEventListener('pkg:shell-reset', this.onShellReset);
     this.host?.removeEventListener('copy', this.onCopyEvent);
     this.ro?.disconnect();
     this.ro = null;

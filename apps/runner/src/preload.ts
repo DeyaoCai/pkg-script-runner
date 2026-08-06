@@ -25,6 +25,25 @@ export type LogPayload =
 
 export type JobInfo = { id: string; dir: string; scriptName: string };
 
+export type UiSessionSnap = {
+  id: string;
+  kind: 'system' | 'job' | 'shell';
+  title: string;
+  dir: string | null;
+  scriptName?: string;
+  text: string;
+  running: boolean;
+  stopping: boolean;
+  code: number | null;
+  cwd?: string;
+};
+
+export type UiStateSnapshot = {
+  sessions: UiSessionSnap[];
+  jobs: JobInfo[];
+  stopping: string[];
+};
+
 type SettingsPayload = {
   fontId: string;
   glassAlpha: number;
@@ -109,6 +128,11 @@ const api = {
   ): Promise<{ cwd: string; title: string; dir: string } | null> =>
     ipcRenderer.invoke('pkg:shell-cwd', id),
   getJobs: (): Promise<JobInfo[]> => ipcRenderer.invoke('pkg:get-jobs'),
+  getUiState: (): Promise<UiStateSnapshot> => ipcRenderer.invoke('pkg:get-ui-state'),
+  clearLogSession: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke('pkg:clear-log-session', id),
+  removeLogSession: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke('pkg:remove-log-session', id),
   getSettings: (): Promise<SettingsPayload> =>
     ipcRenderer.invoke('pkg:get-settings'),
   openTraySettings: (): Promise<void> =>
@@ -203,6 +227,8 @@ const api = {
     onChannel<boolean>('pkg:maximized', cb),
   onLog: (cb: (payload: LogPayload) => void) =>
     onChannel<LogPayload>('pkg:log', cb),
+  onUiState: (cb: (state: UiStateSnapshot) => void) =>
+    onChannel<UiStateSnapshot>('pkg:ui-state', cb),
   onRunning: (cb: (running: boolean) => void) =>
     onChannel<boolean>('pkg:running', cb),
   onJobs: (cb: (jobs: JobInfo[]) => void) => onChannel<JobInfo[]>('pkg:jobs', cb),
