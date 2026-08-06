@@ -11,6 +11,62 @@
   letter-spacing: 0.02em;
 }
 
+.scripts-mode-bar {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-2) 0;
+}
+
+.scripts-mode-seg {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.scripts-mode-seg .seg-btn,
+.scripts-mode-ico-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.scripts-mode-ico {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  display: block;
+  opacity: 0.85;
+}
+
+.scripts-mode-ico-btn.is-active .scripts-mode-ico {
+  opacity: 1;
+}
+
+.scripts-mode-count {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  background: color-mix(in srgb, var(--accent) 28%, var(--panel));
+  color: var(--accent);
+  pointer-events: none;
+}
+
 .scripts-head-actions {
   display: flex;
   align-items: center;
@@ -48,7 +104,8 @@
 
 input#searchInput,
 input#projectSearchInput {
-  width: min(160px, 36vw);
+  width: 100%;
+  max-width: 140px;
   min-width: 0;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -149,6 +206,147 @@ input#projectSearchInput:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
+}
+
+.script-row-job {
+  gap: var(--space-2);
+}
+
+.script-job-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.script-job-group:last-child {
+  margin-bottom: 0;
+}
+
+.script-job-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 2px;
+  min-width: 0;
+}
+
+.script-job-group-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-12);
+  font-weight: 650;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.script-job-group-count {
+  flex-shrink: 0;
+  min-width: 1.1em;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.script-job-group-stop {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.script-job-group-stop:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-fg-danger) 40%, var(--border));
+  color: var(--color-fg-danger);
+  background: color-mix(in srgb, var(--color-fg-danger) 8%, transparent);
+}
+
+.script-job-group-stop:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.script-row-job.is-active-log {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.script-job-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.script-job-project {
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.script-job-stop {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface, var(--panel));
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-12);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.script-job-stop:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-fg-danger) 45%, var(--border));
+  color: var(--color-fg-danger);
+}
+
+.script-job-stop:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.script-fav-btn {
+  flex-shrink: 0;
+  margin: 0 0 0 auto;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.script-fav-btn:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.script-fav-btn.is-on {
+  color: var(--accent);
 }
 
 .script-popover {

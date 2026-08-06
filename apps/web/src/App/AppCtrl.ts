@@ -162,7 +162,7 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
         projectSearch: '',
         scriptSearch: '',
         projectsWidth: loadWidth('pkg-runner:projects-w', 220),
-        scriptsWidth: loadWidth('pkg-runner:scripts-w', 200),
+        scriptsWidth: loadWidth('pkg-runner:scripts-w', 176),
         theme: 'dark',
         colorEnv: 'prod',
         glassAlpha: 55,
@@ -571,13 +571,18 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   private updateMeta(): void {
     const p = this.data.project;
     if (!p) {
-      this.setData({ meta: '选择含 package.json 的项目目录', metaError: false });
+      // Keep load/select errors set by callers before updateMeta().
+      if (this.data.metaError) return;
+      this.setData({
+        meta: this.data.workspaceRoot
+          ? '在标题栏选择项目以加载脚本'
+          : '选择工作区，再点仓库运行脚本',
+        metaError: false,
+      });
       return;
     }
-    this.setData({
-      meta: `${p.name} · ${p.packageManager} · ${p.scripts.length} scripts · ${p.dir}`,
-      metaError: false,
-    });
+    // Project chips already show name/path — keep meta clear unless flashMeta/errors.
+    this.setData({ meta: '', metaError: false });
   }
 
   flashMeta(message: string, isError: boolean): void {
@@ -766,15 +771,26 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
   }
 
   async runScript(scriptName: string): Promise<void> {
-    if (!this.api || !this.data.project) return;
-    const dir = this.data.project.dir;
+    if (!this.data.project) return;
+    await this.runScriptAt(this.data.project.dir, scriptName);
+  }
+
+  /** Run/stop a script in any project dir (favorites / cross-project). */
+  async runScriptAt(dir: string, scriptName: string): Promise<void> {
+    if (!this.api || !dir.trim() || !scriptName.trim()) return;
     const existing = this.findJob(dir, scriptName);
     if (existing) {
       await this.stopJob(existing.id);
       return;
     }
-    // 停止中禁止立刻再 start（与主机 stoppingJobs 对齐）
     if (this.isScriptStopping(dir, scriptName)) return;
+    if (!this.data.activeProject || !sameDir(this.data.activeProject, dir)) {
+      try {
+        await this.selectProject(dir);
+      } catch {
+        /* still try run — project may not be in workspace list */
+      }
+    }
     const id = await this.api.runScript(dir, scriptName);
     this.setActiveLogId(id);
     this.appendToSession(id, '', {
@@ -795,6 +811,76 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     }
     this.stoppingIds.add(jobId);
     await this.api?.stop(jobId);
+  }
+
+  /** Cross-project running/stopping jobs for ScriptsPanel 「运行中」. */
+  get activeJobsList(): Array<{
+    id: string;
+    dir: string;
+    scriptName: string;
+    stopping: boolean;
+  }> {
+    const map = new Map<
+      string,
+      { id: string; dir: string; scriptName: string; stopping: boolean }
+    >();
+    for (const j of this.data.jobs) {
+      const sess = this.data.logSessions[j.id];
+      map.set(j.id, {
+        id: j.id,
+        dir: j.dir,
+        scriptName: j.scriptName,
+        stopping: !!sess?.stopping || this.stoppingIds.has(j.id),
+      });
+    }
+    for (const s of Object.values(this.data.logSessions)) {
+      if (s.kind !== 'job' || !s.dir) continue;
+      if (!s.running && !s.stopping) continue;
+      if (map.has(s.id)) continue;
+      map.set(s.id, {
+        id: s.id,
+        dir: s.dir,
+        scriptName: s.scriptName || s.title,
+        stopping: !!s.stopping || this.stoppingIds.has(s.id),
+      });
+    }
+    return [...map.values()].sort((a, b) => {
+      const pa = this.projectLabelForDir(a.dir);
+      const pb = this.projectLabelForDir(b.dir);
+      const c = pa.localeCompare(pb, 'zh');
+      if (c !== 0) return c;
+      return a.scriptName.localeCompare(b.scriptName, 'zh');
+    });
+  }
+
+  projectLabelForDir(dir: string): string {
+    const hit = this.data.projects.find((p) => sameDir(p.dir, dir));
+    if (hit?.name) return hit.name;
+    const base = dir.replace(/[/\\]+$/, '').split(/[/\\]/).pop();
+    return base || dir;
+  }
+
+  /** Switch project if needed, then focus the job log tab. */
+  async focusJobLog(jobId: string): Promise<void> {
+    const fromJobs = this.data.jobs.find((j) => j.id === jobId);
+    const sess = this.data.logSessions[jobId];
+    const dir = fromJobs?.dir || sess?.dir || null;
+    if (dir && (!this.data.activeProject || !sameDir(this.data.activeProject, dir))) {
+      await this.selectProject(dir);
+    }
+    this.setActiveLogId(jobId);
+  }
+
+  async stopAllJobs(): Promise<void> {
+    const ids = this.activeJobsList.map((j) => j.id);
+    await Promise.all(ids.map((id) => this.stopJob(id)));
+  }
+
+  async stopJobsInDir(dir: string): Promise<void> {
+    const ids = this.activeJobsList
+      .filter((j) => sameDir(j.dir, dir))
+      .map((j) => j.id);
+    await Promise.all(ids.map((id) => this.stopJob(id)));
   }
 
   async restartJob(jobId: string): Promise<void> {

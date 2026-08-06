@@ -28,7 +28,11 @@
       </div>
     </template>
 
-    <TitleBarMeta :text="app.data.meta" :error="app.data.metaError" />
+    <TitleBarMeta
+      v-if="app.data.meta || app.data.metaError"
+      :text="app.data.meta"
+      :error="app.data.metaError"
+    />
 
     <template #actions>
       <TitleBarAction
@@ -118,6 +122,10 @@ const activeRepoLabel = computed(() => {
 const activeRepoTitle = computed(() => {
   const dir = app.data.activeProject;
   if (!dir) return '选择仓库项目';
+  const p = app.data.project;
+  if (p && p.dir === dir) {
+    return `${p.name} · ${p.packageManager} · ${p.scripts.length} scripts\n${p.dir}`;
+  }
   return dir;
 });
 

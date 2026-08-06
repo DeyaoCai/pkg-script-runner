@@ -4,7 +4,7 @@
   display: flex;
   align-items: stretch;
   gap: 0;
-  --scripts-w: 200px;
+  --scripts-w: 176px;
 }
 
 .split-resizer {
