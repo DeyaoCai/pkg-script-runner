@@ -148,27 +148,44 @@ async function loadMainWindow(win: BrowserWindow): Promise<void> {
   const forceVite =
     process.env.PKG_RUNNER_UI_DEV === '1' ||
     process.env.PKG_RUNNER_UI_DEV === 'true';
-  // 仅显式要 Vite 时才探测；勿对所有 unpackaged 先 HEAD（无 Vite 会空等超时卡主机）
+
+  const tryVite = async (url: string, attempts: number, timeoutMs: number): Promise<boolean> => {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const res = await fetch(url, {
+          method: 'HEAD',
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (res.ok || res.status === 404) {
+          await win.loadURL(url);
+          diagLog('runner', 'ui.load', {
+            via: 'vite',
+            url,
+            attempt: i + 1,
+            ms: Date.now() - t0,
+          });
+          return true;
+        }
+      } catch {
+        if (i + 1 < attempts) await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+    return false;
+  };
+
+  // 显式 Vite：多试几次，避免 400ms 一次失败就静默落到陈旧 dist-ui
   if (uiUrl || forceVite) {
     const url = uiUrl || UI_DEV_URL;
-    try {
-      const res = await fetch(url, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(400),
-      });
-      if (res.ok || res.status === 404) {
-        await win.loadURL(url);
-        diagLog('runner', 'ui.load', {
-          via: 'vite',
-          url,
-          ms: Date.now() - t0,
-        });
-        return;
-      }
-    } catch {
-      /* fall through to dist-ui */
+    const ok = await tryVite(url, forceVite ? 8 : 2, forceVite ? 800 : 400);
+    if (ok) return;
+    diagLog('runner', 'ui.vite-miss', { url, forceVite });
+    if (forceVite) {
+      console.warn(
+        `[runner] Vite UI 未就绪 (${url})，仍尝试加载；请确认 pnpm dev 已起 @pkg-runner/web`,
+      );
     }
   }
+
   const distIndex = uiDistIndex();
   if (fs.existsSync(distIndex)) {
     await win.loadFile(distIndex);

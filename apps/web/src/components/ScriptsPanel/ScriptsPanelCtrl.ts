@@ -29,6 +29,7 @@ type ScriptsMode = 'scripts' | 'running' | 'favorites';
 type TState = {
   popover: Popover;
   mode: ScriptsMode;
+  refreshing: boolean;
 };
 
 type ScriptRow = {
@@ -78,12 +79,16 @@ export class ScriptsPanelCtrl extends Controller<TData, TProps, TState> {
         expandedDirs: loadExpandedDirs(),
       },
       props: {},
-      state: { popover: null, mode: 'scripts' },
+      state: { popover: null, mode: 'scripts', refreshing: false },
     });
   }
 
   get mode(): ScriptsMode {
     return this.state.mode;
+  }
+
+  get refreshing(): boolean {
+    return this.state.refreshing;
   }
 
   setMode(mode: ScriptsMode): void {
@@ -329,6 +334,16 @@ export class ScriptsPanelCtrl extends Controller<TData, TProps, TState> {
     e.stopPropagation();
     e.preventDefault();
     await this.app.stopJobsInDir(dir);
+  }
+
+  async onRefresh(): Promise<void> {
+    if (this.state.refreshing) return;
+    this.setState({ refreshing: true });
+    try {
+      await this.app.refreshProjects();
+    } finally {
+      this.setState({ refreshing: false });
+    }
   }
 
   async onStopAll(): Promise<void> {

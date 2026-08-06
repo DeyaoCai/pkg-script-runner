@@ -58,6 +58,15 @@
       <span id="scriptsLabel">{{ ctrl.label }}</span>
       <div class="scripts-head-actions">
         <button
+          type="button"
+          class="btn"
+          :disabled="ctrl.refreshing || !app.data.workspaceRoot"
+          title="重新扫描工作区并读取 package.json"
+          @click="ctrl.onRefresh()"
+        >
+          {{ ctrl.refreshing ? '读取中…' : '刷新' }}
+        </button>
+        <button
           v-if="ctrl.mode === 'running'"
           type="button"
           class="btn"

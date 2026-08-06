@@ -643,6 +643,20 @@ export class AppCtrl extends Controller<AppData, TProps, AppUiState> {
     }, 2800);
   }
 
+  /** 重新扫描工作区并重读各仓库 package.json scripts */
+  async refreshProjects(): Promise<void> {
+    if (!this.api) return;
+    try {
+      await this.applyProjectsState(await this.api.getProjects());
+      this.flashMeta('已重新读取 package.json', false);
+    } catch (e) {
+      this.flashMeta(
+        e instanceof Error ? e.message : '重新读取失败',
+        true,
+      );
+    }
+  }
+
   async applyProjectsState(state: ProjectsState): Promise<void> {
     this.setData({
       workspaceRoot: state.workspaceRoot ?? null,
