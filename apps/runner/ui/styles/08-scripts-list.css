@@ -102,11 +102,11 @@
   letter-spacing: normal;
 }
 
-input#searchInput,
 input#projectSearchInput {
   width: 100%;
-  max-width: 140px;
+  max-width: 180px;
   min-width: 0;
+  flex: 1;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -120,13 +120,6 @@ input#projectSearchInput {
   outline: none;
 }
 
-input#projectSearchInput {
-  flex: 1;
-  width: auto;
-  max-width: 180px;
-}
-
-input#searchInput:focus,
 input#projectSearchInput:focus {
   border-color: var(--accent);
 }

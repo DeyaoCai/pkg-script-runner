@@ -19,7 +19,7 @@
           title="作用于脚本 / 运行中 / 收藏；模糊或正则，如 /dev:|dist:/"
         >
           <input
-            id="searchInput"
+            id="scriptSearchInput"
             class="tb-search-input"
             type="search"
             spellcheck="false"
@@ -113,15 +113,26 @@ onMounted(() => ctrl.syncFromApp());
   flex: 1;
   min-width: 0;
   width: 100%;
+  height: 100%;
   margin: 0;
   padding: 0;
-  border: 0;
+  border: 0 !important;
+  border-radius: 0;
   outline: none;
+  box-shadow: none;
   background: transparent;
   color: var(--text, var(--fg));
   font: inherit;
   font-size: var(--fs-13, 13px);
   font-weight: 650;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.tb-search-input:focus {
+  border: 0 !important;
+  outline: none;
+  box-shadow: none;
 }
 
 .tb-search-input::placeholder {
